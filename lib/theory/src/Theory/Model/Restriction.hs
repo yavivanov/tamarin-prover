@@ -18,6 +18,7 @@
 
 module Theory.Model.Restriction (
     ProtoRestriction(..)
+  , RestrictionName(..)
   , Restriction
   , SyntacticRestriction
   , RestrictionAttribute(..)
@@ -25,6 +26,7 @@ module Theory.Model.Restriction (
   , rstrFormula
   , varNow
   , fromRuleRestriction
+  , rstrNameString
 ) where
 
 import           Control.DeepSeq
@@ -54,11 +56,19 @@ data RestrictionAttribute = LHSRestriction
     | RHSRestriction
     | BothRestriction
     deriving (Eq, Ord, Show)
+    
+-- | Name types for a 'Restriction'.
+data RestrictionName = OrdinaryName String
+    | SAPiCInclName String
+    deriving (Generic, Eq, Ord, Show)
+
+instance NFData RestrictionName
+instance Binary RestrictionName
 
 -- | A restriction describes a property that must hold for all traces. Restrictions are
 -- always used as lemmas in proofs.
 data ProtoRestriction f = Restriction
-    { _rstrName    :: String
+    { _rstrName    :: RestrictionName
     , _rstrFormula :: f
     }
     deriving (Generic)
@@ -134,8 +144,8 @@ restrPrefix = "Restr_"
 --    and
 --    ranme(f(x,y), z)
 --
-fromRuleRestriction :: String -> LNFormula -> (Restriction, Fact LNTerm)
-fromRuleRestriction rname f =
+fromRuleRestriction :: RestrictionName -> LNFormula -> (Restriction, Fact LNTerm)
+fromRuleRestriction (OrdinaryName rname) f =
                 ( mkRestriction (rewrF f)
                 , mkFact $ getVarTerms (rewrSubst f) $ rewrF f)
             where

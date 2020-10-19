@@ -366,18 +366,20 @@ colorForProcessName names = hsvToRGB $ normalize $ fst $ foldl f (head palette, 
 
 toRule :: GoodAnnotation ann => AnnotatedRule ann -> Rule ProtoRuleEInfo
 toRule AnnotatedRule{..} = -- this is a Record Wildcard
-          Rule (ProtoRuleEInfo (StandRule name) attr restr) l r a (newVariables l r)
+          Rule (ProtoRuleEInfo (StandRule (nameType name)) attr restr) l r a (newVariables l r)
           where
+            nameType = case processName of
+              Just _ -> DefdRuleName
+              Nothing -> SAPiCRuleName
             name = case processName of
                 Just s -> s
-                Nothing ->
-                         unNull (stripNonAlphanumerical (prettySapicTopLevel process))
-                         ++ "_" ++ show index ++ "_"
+                Nothing -> unNull (stripSemicolon (prettySapicTopLevel process))
+                         ++ "#_" ++ show index ++ "_"
                          ++ prettyEitherPositionOrSpecial position
             attr = [ RuleColor $ colorForProcessName $ getTopLevelName process
                    , Process $ toProcess process]
             l = map factToFact prems
             a = map actionToFact acts
             r = map factToFact concs
-            stripNonAlphanumerical = filter isAlpha
             unNull s = if null s then "p" else s
+            stripSemicolon = filter (\x -> x /= ';')

@@ -152,7 +152,12 @@ liftedAddCaseTest thy cTest =
 --        (but they should not, as they will not be exported)
 liftedAddProtoRule :: Catch.MonadThrow m => OpenTheory -> OpenProtoRule -> m OpenTheory
 liftedAddProtoRule thy ru
-    | (StandRule rname) <- get (preName . rInfo . oprRuleE) ru = do
+    | (StandRule (DefdRuleName rname)) <- get (preName . rInfo . oprRuleE) ru = do
+        rformulasE <- mapM (liftedExpandFormula thy) (rfacts $ get oprRuleE ru)
+        thy'      <- foldM addExpandedRestriction thy  (restrictions rname rformulasE)
+        thy''     <- liftedAddProtoRuleNoExpand   thy' (addActions   rname rformulasE) -- TODO was ru instead of rformulas
+        return thy''
+    | (StandRule (SAPiCRuleName rname)) <- get (preName . rInfo . oprRuleE) ru = do
         rformulasE <- mapM (liftedExpandFormula thy) (rfacts $ get oprRuleE ru)
         thy'      <- foldM addExpandedRestriction thy  (restrictions rname rformulasE)
         thy''     <- liftedAddProtoRuleNoExpand   thy' (addActions   rname rformulasE) -- TODO was ru instead of rformulas
@@ -167,7 +172,9 @@ liftedAddProtoRule thy ru
 
                 restrictions rname rformulas =  map (fst . fromRuleRestriction' rname) (counter rformulas)
                 actions      rname rformulas =  map (snd . fromRuleRestriction' rname) (counter rformulas)
-                fromRuleRestriction' rname (i,f) = fromRuleRestriction (rname ++ "_" ++ show i) f
+                fromRuleRestriction' rname (i,f) = case get (preName . rInfo . oprRuleE) ru of 
+                  (StandRule (SAPiCRuleName _)) -> fromRuleRestriction (SAPiCInclName(rname ++ "_" ++ show i)) f
+                  (StandRule (DefdRuleName _)) -> fromRuleRestriction (OrdinaryName(rname ++ "_" ++ show i)) f
                 counter = zip [1::Int ..]
 
 -- | Flag formulas
@@ -488,13 +495,13 @@ diffTheory inFile = do
     liftedAddRestriction' thy rstr = if isLeftRestriction rstr
                                        then case addRestrictionDiff LHS (toRestriction rstr) thy of
                                                Just thy' -> return thy'
-                                               Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
+                                               Nothing   -> fail $ "duplicate restriction: " ++ rstrNameString (get rstrName (toRestriction rstr))
                                        else if isRightRestriction rstr
                                                then case addRestrictionDiff RHS (toRestriction rstr) thy of
                                                   Just thy' -> return thy'
-                                                  Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
+                                                  Nothing   -> fail $ "duplicate restriction: " ++ rstrNameString (get rstrName (toRestriction rstr))
                                                else case addRestrictionDiff RHS (toRestriction rstr) thy of
                                                   Just thy' -> case addRestrictionDiff LHS (toRestriction rstr) thy' of
                                                      Just thy'' -> return thy''
-                                                     Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
-                                                  Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
+                                                     Nothing   -> fail $ "duplicate restriction: " ++ rstrNameString (get rstrName (toRestriction rstr))
+                                                  Nothing   -> fail $ "duplicate restriction: " ++ rstrNameString (get rstrName (toRestriction rstr))
