@@ -477,7 +477,7 @@ factReports thy = concat
         if info `S.member` ruleActions
           then []
           else return $ (,) "Restriction actions" $
-                 text ("restriction " ++ quote (rstrNameString name) ++ " references action ") $-$
+                 text ("restriction " ++ quote name ++ " references action ") $-$
                  nest 2 (text $ show info) $-$
                  text "but no rule has such an action."
 
@@ -632,7 +632,7 @@ factReportsDiff thy = concat
         if info `S.member` ruleActions
           then []
           else return $ (,) "Restriction actions" $
-                 text (show s ++ "restriction " ++ quote (rstrNameString name) ++ " references action ") $-$
+                 text (show s ++ "restriction " ++ quote name ++ " references action ") $-$
                  nest 2 (text $ show info) $-$
                  text "but no rule has such an action."
 
@@ -703,7 +703,7 @@ formulaReports thy = do
                          fm     = get lFormula l
                      return (header, fm)
               <|> do RestrictionItem rstr <- get thyItems thy
-                     let header = "restriction " ++ quote (rstrNameString (get rstrName rstr))
+                     let header = "restriction " ++ quote (get rstrName rstr)
                          fm     = get rstrFormula rstr
                      return (header, fm)
 
@@ -769,7 +769,7 @@ formulaReportsDiff thy = do
                          fm     = get lFormula l
                      return (header, fm)
               <|> do EitherRestrictionItem (s, rstr) <- get diffThyItems thy
-                     let header = show s ++ " restriction " ++ quote (rstrNameString (get rstrName rstr))
+                     let header = show s ++ " restriction " ++ quote (get rstrName rstr)
                          fm     = get rstrFormula rstr
                      return (header, fm)
 
