@@ -8,7 +8,7 @@
 --
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 --
--- Abstract intepretation for partial evaluation of multiset rewriting
+-- Abstract interpretation for partial evaluation of multiset rewriting
 -- systems.
 module Theory.Tools.AbstractInterpretation (
   -- * Combinator to define abstract interpretations
@@ -43,7 +43,7 @@ import           Theory.Text.Pretty
 
 -- | Higher-order combinator to construct abstract interpreters.
 interpretAbstractly
-    :: (Eq s, HasFrees i, Apply i, Show i)
+    :: (Eq s, HasFrees i, Apply LNSubst i, Show i)
     => ([Equal LNFact] -> [LNSubstVFresh])
     -- ^ Unification  of equalities over facts. We assume that facts with
     -- different tags are never unified.
@@ -123,8 +123,8 @@ partialEvaluation evalStyle ruEs = reader $ \hnd ->
     -- the same position provided they have the same sort.
     absFact :: LNFact -> LNFact
     absFact fa = case fa of
-        Fact OutFact _ -> outFact (varTerm (LVar "z" LSortMsg 0))
-        Fact tag ts    -> Fact tag $ evalAbstraction $ traverse absTerm ts
+        Fact OutFact _ _ -> outFact (varTerm (LVar "z" LSortMsg 0))
+        Fact tag an ts    -> Fact tag an $ evalAbstraction $ traverse absTerm ts
       where
         evalAbstraction = (`evalBind` noBindings) . (`evalFreshT` nothingUsed)
 

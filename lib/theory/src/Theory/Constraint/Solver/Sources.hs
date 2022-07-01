@@ -43,7 +43,7 @@ import           Control.Parallel.Strategies
 -- import           System.Environment
 -- import           System.IO.Unsafe
 
-import           Text.PrettyPrint.Highlight
+-- import           Text.PrettyPrint.Highlight
 
 import           Extension.Data.Label
 import           Extension.Prelude
@@ -52,7 +52,6 @@ import           Theory.Constraint.Solver.Contradictions (contradictorySystem)
 import           Theory.Constraint.Solver.Goals
 import           Theory.Constraint.Solver.Reduction
 import           Theory.Constraint.Solver.Simplify
--- import           Theory.Constraint.Solver.Types
 import           Theory.Constraint.System
 import           Theory.Model
 
@@ -125,18 +124,20 @@ refineSource ctxt proofStep th =
 -- Returns the names of the steps applied.
 solveAllSafeGoals :: [Source] -> Reduction [String]
 solveAllSafeGoals ths' =
-    solve ths' [] 10
+    solve ths' [] Nothing 10
   where
 --    extensiveSplitting = unsafePerformIO $
 --      (getEnv "TAMARIN_EXTENSIVE_SPLIT" >> return True) `catchIOError` \_ -> return False
     safeGoal _       _          (_,   (_, LoopBreaker)) = False
     safeGoal doSplit chainsLeft (goal, _              ) =
       case goal of
-        ChainG _ _    -> if (chainsLeft > 0) 
-                            then True 
+        ChainG _ _    -> if (chainsLeft > 0)
+                            then True
                             else (trace "Stopping precomputation, too many chain goals." False)
         ActionG _ fa  -> not (isKUFact fa)
-        PremiseG _ fa -> not (isKUFact fa)
+        -- we do not solve KD goals for Xor facts as insertAction inserts
+        -- these goals directly. This prevents loops in the precomputations
+        PremiseG _ fa -> not (isKUFact fa) && not (isKDXorFact fa) && not (isNoSourcesFact fa)
         DisjG _       -> doSplit
         -- Uncomment to get more extensive case splitting
         SplitG _      -> doSplit --extensiveSplitting &&
@@ -145,18 +146,24 @@ solveAllSafeGoals ths' =
     usefulGoal (_, (_, Useful)) = True
     usefulGoal _                = False
 
-    isKDPrem (PremiseG _ fa,_) = isKDFact fa
+    isKDPrem (PremiseG _ fa,_) = (isKDFact fa) && (not (isKDXorFact fa))
     isKDPrem _                 = False
     isChainPrem1 (ChainG _ (_,PremIdx 1),_) = True
     isChainPrem1 _                          = False
 
-    solve :: [Source] -> [String] -> Integer -> Reduction [String]
-    solve ths caseNames chainsLeft = do
+    solve :: [Source] -> [String] -> Maybe LNTerm -> Integer -> Reduction [String]
+    solve ths caseNames lastChainTerm chainsLeft = do
         simplifySystem
         ctxt <- ask
         contradictoryIf =<< (gets (contradictorySystem ctxt))
         goals  <- gets openGoals
         chains <- gets unsolvedChains
+        -- Filter out chain goals where the term in the conclusion is identical to one we just solved,
+        -- as this indicates our chain can loop
+        filteredGoals <- filterM  (\(g,_) -> case g of
+            (ChainG c _) -> (\x -> return $ Just True /= liftM2 eqModuloFreshnessNoAC lastChainTerm x) =<< kConcTerm c
+            _            -> return True) goals
+
         -- try to either solve a safe goal or use one of the precomputed case
         -- distinctions
         let noChainGoals = null [ () | (ChainG _ _, _) <- goals ]
@@ -164,9 +171,11 @@ solveAllSafeGoals ths' =
             -- from a message variable; i.e., a chain constraint that is no
             -- open goal.
             splitAllowed    = noChainGoals && not (null chains)
-            safeGoals       = fst <$> filter (safeGoal splitAllowed chainsLeft) goals
+            safeGoals       = fst <$> filter (safeGoal splitAllowed chainsLeft) filteredGoals
             remainingChains ((ChainG _ _):_) = chainsLeft-1
             remainingChains _                = chainsLeft
+            -- we do not solve KD goals for Xor facts as insertAction inserts
+            -- these goals directly. This prevents loops in the precomputations
             kdPremGoals     = fst <$> filter (\g -> isKDPrem g || isChainPrem1 g) goals
             usefulGoals     = fst <$> filter usefulGoal goals
             nextStep :: Maybe (Reduction [String], Maybe Source)
@@ -174,13 +183,26 @@ solveAllSafeGoals ths' =
                 ((\x -> (fmap return (solveGoal x), Nothing)) <$> headMay (kdPremGoals)) <|>
                 ((\x -> (fmap return (solveGoal x), Nothing)) <$> headMay (safeGoals)) <|>
                 (asum $ map (solveWithSourceAndReturn ctxt ths) usefulGoals)
+
+        -- Update the last chain conclusion term if next step is a 'safe' chain goal (kdPremGoals is empty)
+        lastChainTerm' <- case (kdPremGoals, safeGoals) of
+            ([], ((ChainG c _):_)) -> (\t -> return $ t <|> lastChainTerm) =<< kConcTerm c
+            _                      -> return lastChainTerm
+
         case nextStep of
           Nothing   -> return caseNames
-          Just (step, Nothing) -> (\x -> solve ths (caseNames ++ x) (remainingChains safeGoals)) =<< step
-          Just (step, Just usedCase) -> (\x -> solve (filterCases usedCase ths) (caseNames ++ x) (remainingChains safeGoals)) =<< step
+          Just (step, Nothing) -> (\x -> solve ths (caseNames ++ x) lastChainTerm' (remainingChains safeGoals)) =<< step
+          Just (step, Just usedCase) -> (\x -> solve (filterCases usedCase ths) (caseNames ++ x) lastChainTerm' (remainingChains safeGoals)) =<< step
 
     filterCases :: Source -> [Source] -> [Source]
     filterCases usedCase cds = filter (\x -> usedCase /= x) cds
+
+    kConcTerm :: NodeConc -> Reduction (Maybe LNTerm)
+    kConcTerm c = do
+        faConc <- gets $ nodeConcFact c
+        case kFactView faConc of
+            Just (_,t) -> return $ Just t
+            _          -> return Nothing
 
 
 ------------------------------------------------------------------------------
@@ -199,7 +221,7 @@ removeRedundantCases ctxt stableVars getSys cases0 =
     -- decorate with index and normed version of the system
     decoratedCases = map (second addNormSys) $  zip [(0::Int)..] cases0
     -- drop cases where the normed systems coincide
-    cases          =   map (fst . snd) . sortOn fst . sortednubOn (snd . snd) $ decoratedCases
+    cases          =   map (fst . snd) . sortOn fst . sortednubBy (\(_,(_, x)) (_,(_, y)) -> compareSystemsUpToNewVars x y) $ decoratedCases
 
     addNormSys = id &&& ((modify sEqStore dropNameHintsBound) . renameDropNameHints . getSys)
 
@@ -254,8 +276,8 @@ matchToGoal ctxt th0 goalTerm =
   where
     -- this code reflects the precomputed cases in 'precomputeSources'
     maybeMatcher (PremiseG _ faTerm, PremiseG _ faPat)  = factTag faTerm == factTag faPat
-    maybeMatcher ( ActionG _ (Fact KUFact [tTerm])
-                 , ActionG _ (Fact KUFact [tPat]))      =
+    maybeMatcher ( ActionG _ (Fact KUFact _ [tTerm])
+                 , ActionG _ (Fact KUFact _ [tPat]))      =
         case (viewTerm tPat, viewTerm tTerm) of
             (Lit  (Var v),_) | lvarSort v == LSortFresh -> sortOfLNTerm tPat == LSortFresh
             (FApp o _, FApp o' _)                       -> o == o'
@@ -312,6 +334,7 @@ applySource ctxt th0 goal = case matchToGoal ctxt th0 goal of
   where
     keepVarBindings = M.fromList (map (\v -> (v, v)) (frees goal))
 
+
 -- | Saturate the sources with respect to each other such that no
 -- additional splitting is introduced; i.e., only rules with a single or no
 -- conclusion are used for the saturation.
@@ -322,10 +345,10 @@ saturateSources ctxt thsInit =
   where
     go :: [Source] -> Integer -> [Source]
     go ths n =
-        if (any or (changes `using` parList rdeepseq)) && (n <= 3)
+        if (any or (changes `using` parList rdeepseq)) && (n <= 5)
           then go ths' (n + 1)
-          else if (n > 3) 
-            then trace "saturateSources: Saturation aborted, more than 3 iterations." ths'
+          else if (n > 5)
+            then trace "saturateSources: Saturation aborted, more than 5 iterations." ths'
             else ths'
       where
         (changes, ths') = unzip $ map (refineSource ctxt solver) ths
@@ -352,17 +375,18 @@ precomputeSources ctxt restrictions =
     protoGoals = someProtoGoal <$> absProtoFacts
     msgGoals   = someKUGoal <$> absMsgFacts
 
-    getProtoFact (Fact KUFact _ ) = mzero
-    getProtoFact (Fact KDFact _ ) = mzero
-    getProtoFact fa               = return fa
+    getProtoFact (Fact KUFact _ _ ) = mzero
+    getProtoFact (Fact KDFact _ _ ) = mzero
+    getProtoFact fa                 = return fa
 
-    absFact (Fact tag ts) = (tag, length ts)
+    -- remove annotations to avoid precomputing the same source with multiple annotations
+    absFact (Fact tag _ ts) = (tag, length ts)
 
     nMsgVars n = [ varTerm (LVar "t" LSortMsg i) | i <- [1..fromIntegral n] ]
 
     someProtoGoal :: (FactTag, Int) -> Goal
     someProtoGoal (tag, arity) =
-        PremiseG (someNodeId, PremIdx 0) (Fact tag (nMsgVars arity))
+        PremiseG (someNodeId, PremIdx 0) (Fact tag S.empty (nMsgVars arity))
 
     someKUGoal :: LNTerm -> Goal
     someKUGoal m = ActionG someNodeId (kuFact m)
@@ -373,9 +397,9 @@ precomputeSources ctxt restrictions =
     rules = get pcRules ctxt
     absProtoFacts = sortednub $ do
         ru <- joinAllRules rules
-        fa <- absFact <$> (getProtoFact =<< (get rConcs ru ++ get rPrems ru))
+        fa@(tag,_) <- absFact <$> (getProtoFact =<< (get rConcs ru ++ get rPrems ru))
         -- exclude facts handled specially by the prover
-        guard (not $ fst fa `elem` [OutFact, InFact, FreshFact])
+        guard (not $ tag `elem` [OutFact, InFact, FreshFact])
         return fa
 
     absMsgFacts :: [LNTerm]
@@ -383,7 +407,7 @@ precomputeSources ctxt restrictions =
       [ return $ varTerm (LVar "t" LSortFresh 1)
       , if enableBP msig then return $ fAppC EMap $ nMsgVars (2::Int) else []
       , [ fAppNoEq o $ nMsgVars k
-        | o@(_,(k,priv)) <- S.toList . noEqFunSyms  $ msig
+        | o@(_,(k,priv,_)) <- S.toList . noEqFunSyms  $ msig
         , NoEq o `S.notMember` implicitFunSig, k > 0 || priv==Private]
       ]
 
@@ -414,6 +438,3 @@ refineWithSourceAsms assumptions ctxt cases0 =
 
     isNoDisjGoal (DisjG _)  _ = False
     isNoDisjGoal _          _ = True
-
-
-

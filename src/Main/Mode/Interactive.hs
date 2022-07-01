@@ -85,8 +85,6 @@ run thisMode as = case findArg "workDir" as of
               "json" -> ensureGraphCommand as
               _      -> return True
           _ <- ensureMaude as
-          sapic <- ensureSapic as
-          putStrLn ""
           port <- readPort
           let webUrl = serverUrl port
           putStrLn $ intercalate "\n"
@@ -102,6 +100,7 @@ run thisMode as = case findArg "workDir" as of
                 cacheDir
                 workDir (argExists "loadstate" as) (argExists "autosave" as)
                 (loadClosedDiffThyWfReport as) (loadClosedDiffThyString as)
+                (reportOnClosedDiffThyStringWellformedness as)
                 (argExists "debug" as) (dotPath as) readImageFormat
                 (constructAutoDiffProver as)
                 (runWarp port)
@@ -111,10 +110,10 @@ run thisMode as = case findArg "workDir" as of
                 cacheDir
                 workDir (argExists "loadstate" as) (argExists "autosave" as)
                 (loadClosedThyWfReport as) (loadClosedThyString as)
+                (reportOnClosedThyStringWellformedness as)
                 (argExists "debug" as) (graphPath as) readImageFormat
                 (constructAutoProver as)
                 (runWarp port)
-                sapic
         else
           helpAndExit thisMode
             (Just $ "directory '" ++ workDir ++ "' does not exist.")

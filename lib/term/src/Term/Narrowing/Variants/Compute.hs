@@ -18,6 +18,8 @@ import Term.Substitution
 import Term.Unification
 import Term.Narrowing.Variants.Check (leqSubstVariant,variantsFrom)
 
+import Utils.Misc
+
 import Extension.Prelude
 
 import Data.Ord
@@ -26,6 +28,10 @@ import Data.Maybe
 import Control.Arrow
 -- import Control.Applicative
 import Control.Monad.Reader
+
+-- import           System.Environment
+import           System.IO.Unsafe (unsafePerformIO)
+import qualified Term.Maude.Process as UM
 
 import Debug.Trace.Ignore
 
@@ -60,7 +66,7 @@ instance Sized Variant where
     size = size . varSubst
 
 -- | @narrowVariant rules t maxdepth@ either returns @Nothing@
---   if variant narrrowing hit the bound and there are still unexplored steps
+--   if variant narrowing hit the bound and there are still unexplored steps
 --   or @Just explored@ if the search finished before hitting the
 --   bound.
 narrowVariant :: LNTerm -- ^ The term.
@@ -138,7 +144,10 @@ computeVariantsBound t d = reader $ \hnd -> (\res -> trace (show ("ComputeVarian
 --   without a bound or symmetry substitution.
 --   The rewriting rules are taken from the Maude context.
 computeVariants :: LNTerm -> WithMaude [LNSubstVFresh]
-computeVariants t =
-    fromMaybe err <$> computeVariantsBound t Nothing
+computeVariants t = case getEnvMaybe "TAMARIN_NO_MAUDE_VARIANTS" of
+    Just _  -> fromMaybe err <$> computeVariantsBound t Nothing
+    Nothing -> reader $ \hnd -> do
+               subst <- unsafePerformIO $ UM.variantsViaMaude hnd sortOfName t
+               return $ restrictVFresh (frees t) subst
   where
     err = error "impossible: Variant computation failed without giving a bound"

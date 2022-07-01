@@ -1,6 +1,10 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns  #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 -- |
 -- Copyright   : (c) 2010-2012 Benedikt Schmidt & Simon Meier
 -- License     : GPL v3 (see LICENSE)
@@ -76,6 +80,7 @@ import           Prelude                                 hiding (id, (.))
 
 import qualified Data.Foldable                           as F
 import qualified Data.Map                                as M
+import qualified Data.Map.Strict                         as M'
 import qualified Data.Set                                as S
 import qualified Data.ByteString.Char8                   as BC
 import           Data.List                               (mapAccumL)
@@ -97,10 +102,8 @@ import           Extension.Prelude
 import           Logic.Connectives
 
 import           Theory.Constraint.Solver.Contradictions
--- import           Theory.Constraint.Solver.Types
 import           Theory.Constraint.System
 import           Theory.Model
-
 
 ------------------------------------------------------------------------------
 -- The constraint reduction monad
@@ -139,12 +142,13 @@ execReduction m ctxt se fs =
 data ChangeIndicator = Unchanged | Changed
        deriving( Eq, Ord, Show )
 
+instance Semigroup ChangeIndicator where
+    Changed   <> _         = Changed
+    _         <> Changed   = Changed
+    Unchanged <> Unchanged = Unchanged
+
 instance Monoid ChangeIndicator where
     mempty = Unchanged
-
-    Changed   `mappend` _         = Changed
-    _         `mappend` Changed   = Changed
-    Unchanged `mappend` Unchanged = Unchanged
 
 -- | Return 'True' iff there was a change.
 wasChanged :: ChangeIndicator -> Bool
@@ -195,7 +199,7 @@ insertFreshNodeConc rules = do
     return (ru, (i, v), fa)
 
 -- | Insert a fresh rule node labelled with a fresh instance of one of the rules
--- and solve it's 'Fr', 'In', and 'KU' premises immediatly.
+-- and solve it's 'Fr', 'In', and 'KU' premises immediately.
 -- If a parent node is given, updates the remaining rule applications.
 insertFreshNode :: [RuleAC] -> Maybe RuleACInst -> Reduction (NodeId, RuleACInst)
 insertFreshNode rules parent = do
@@ -203,7 +207,7 @@ insertFreshNode rules parent = do
     (,) i <$> labelNodeId i rules parent
 
 -- | Label a node-id with a fresh instance of one of the rules and
--- solve it's 'Fr', 'In', and 'KU' premises immediatly.
+-- solve it's 'Fr', 'In', and 'KU' premises immediately.
 -- If a parent node is given, updates the remaining rule applications.
 --
 -- PRE: Node must not yet be labelled with a rule.
@@ -222,26 +226,26 @@ labelNodeId = \i rules parent -> do
     -- | Import a rule with all its variables renamed to fresh variables.
     importRule ru = someRuleACInst ru `evalBindT` noBindings
 
-    mkISendRuleAC m = return $ Rule (IntrInfo (ISendRule))
-                                    [kuFact m] [inFact m] [kLogFact m]
+    mkISendRuleAC ann m = return $ Rule (IntrInfo (ISendRule))
+                                    [kuFactAnn ann m] [inFact m] [kLogFact m] []
 
 
-    mkFreshRuleAC m = Rule (ProtoInfo (ProtoRuleACInstInfo FreshRule []))
-                           [] [freshFact m] []
+    mkFreshRuleAC m = Rule (ProtoInfo (ProtoRuleACInstInfo FreshRule [] []))
+                           [] [freshFact m] [] [m]
 
     exploitPrems i ru = mapM_ (exploitPrem i ru) (enumPrems ru)
 
     exploitPrem i ru (v, fa) = case fa of
         -- CR-rule *DG2_2* specialized for *In* facts.
-        Fact InFact [m] -> do
+        Fact InFact ann [m] -> do
             j <- freshLVar "vf" LSortNode
-            ruKnows <- mkISendRuleAC m
+            ruKnows <- mkISendRuleAC ann m
             modM sNodes (M.insert j ruKnows)
             modM sEdges (S.insert $ Edge (j, ConcIdx 0) (i, v))
             exploitPrems j ruKnows
 
         -- CR-rule *DG2_2* specialized for *Fr* facts.
-        Fact FreshFact [m] -> do
+        Fact FreshFact _ [m] -> do
             j <- freshLVar "vf" LSortNode
             modM sNodes (M.insert j (mkFreshRuleAC m))
             unless (isFreshVar m) $ do
@@ -281,7 +285,7 @@ insertEdges edges = do
 -- FIXME: Ensure that intermediate products are also solved before stating
 -- that no rule is applicable.
 insertAction :: NodeId -> LNFact -> Reduction ChangeIndicator
-insertAction i fa = do
+insertAction i fa@(Fact _ ann _) = do
     present <- (goal `M.member`) <$> getM sGoals
     isdiff <- getM sDiffSystem
     nodePresent <- (i `M.member`) <$> getM sNodes
@@ -295,7 +299,7 @@ insertAction i fa = do
                           -- if the node is already present in the graph, do not insert it again. (This can be caused by substitutions applying and changing a goal.)
                           if not nodePresent
                              then do
-                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_pair")) ([(Fact KUFact [m1]),(Fact KUFact [m2])]) ([fa]) ([fa])))
+                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_pair")) ([(kuFactAnn ann m1),(kuFactAnn ann m2)]) ([fa]) ([fa]) []))
                                insertGoal goal False
                                markGoalAsSolved "pair" goal
                                requiresKU m1 *> requiresKU m2 *> return Changed
@@ -314,7 +318,7 @@ insertAction i fa = do
                           -- if the node is already present in the graph, do not insert it again. (This can be caused by substitutions applying and changing a goal.)
                           if not nodePresent
                              then do
-                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_inv")) ([(Fact KUFact [m])]) ([fa]) ([fa])))
+                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_inv")) ([(kuFactAnn ann m)]) ([fa]) ([fa]) []))
                                insertGoal goal False
                                markGoalAsSolved "inv" goal
                                requiresKU m *> return Changed
@@ -333,7 +337,7 @@ insertAction i fa = do
                           -- if the node is already present in the graph, do not insert it again. (This can be caused by substitutions applying and changing a goal.)
                           if not nodePresent
                              then do
-                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_mult")) (map (\x -> Fact KUFact [x]) ms) ([fa]) ([fa])))
+                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_mult")) (map (\x -> kuFactAnn ann x) ms) ([fa]) ([fa]) []))
                                insertGoal goal False
                                markGoalAsSolved "mult" goal
                                mapM_ requiresKU ms *> return Changed
@@ -349,11 +353,11 @@ insertAction i fa = do
                 Just (UpK, viewTerm2 -> FUnion ms) -> do
                 -- In the diff case, add union (?) rule instead of goal
                     if isdiff
-                       then do                          
+                       then do                        
                           -- if the node is already present in the graph, do not insert it again. (This can be caused by substitutions applying and changing a goal.)
                           if not nodePresent
                              then do
-                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_union")) (map (\x -> Fact KUFact [x]) ms) ([fa]) ([fa])))
+                               modM sNodes (M.insert i (Rule (IntrInfo (ConstrRule $ BC.pack "_union")) (map (\x -> kuFactAnn ann x) ms) ([fa]) ([fa]) []))
                                insertGoal goal False
                                markGoalAsSolved "union" goal
                                mapM_ requiresKU ms *> return Changed
@@ -375,7 +379,7 @@ insertAction i fa = do
     -- loop due to generating new KU-nodes that are merged immediately.
     requiresKU t = do
       j <- freshLVar "vk" LSortNode
-      let faKU = kuFact t
+      let faKU = kuFactAnn ann t
       insertLess j i
       void (insertAction j faKU)
 
@@ -400,6 +404,7 @@ insertAtom ato = case ato of
     Less i j      -> do insertLess (ltermNodeId' i) (ltermNodeId' j)
                         return Unchanged
     Last i        -> insertLast (ltermNodeId' i)
+    Syntactic _   -> return Unchanged
 
 -- | Insert a 'Guarded' formula. Ensures that existentials, conjunctions, negated
 -- last atoms, and negated less atoms, are immediately solved using the rules
@@ -494,7 +499,7 @@ combineGoalStatus (GoalStatus solved1 age1 loops1)
 insertGoalStatus :: Goal -> GoalStatus -> Reduction ()
 insertGoalStatus goal status = do
     age <- getM sNextGoalNr
-    modM sGoals $ M.insertWith' combineGoalStatus goal (set gsNr age status)
+    modM sGoals $ M'.insertWith combineGoalStatus goal (set gsNr age status)
     sNextGoalNr =: succ age
 
 -- | Insert a 'Goal' and store its age.
@@ -568,7 +573,7 @@ substNextGoalNr     = return ()
 
 -- | Apply the current substitution of the equation store to a part of the
 -- sequent. This is an internal function.
-substPart :: Apply a => (System :-> a) -> Reduction ()
+substPart :: Apply LNSubst a => (System :-> a) -> Reduction ()
 substPart l = do subst <- getM sSubst
                  modM l (apply subst)
 
@@ -613,10 +618,10 @@ substGoals = do
     changes <- forM goals $ \(goal, status) -> case goal of
         -- Look out for KU-actions that might need to be solved again.
         ActionG i fa@(kFactView -> Just (UpK, m))
-          | (isMsgVar m || isProduct m || isUnion m) && (apply subst m /= m) ->
+          | (isMsgVar m || isProduct m || isUnion m {--|| isXor m-}) && (apply subst m /= m) ->
               insertAction i (apply subst fa)
         _ -> do modM sGoals $
-                  M.insertWith' combineGoalStatus (apply subst goal) status
+                  M'.insertWith combineGoalStatus (apply subst goal) status
                 return Unchanged
 
     return (mconcat changes)
@@ -667,7 +672,7 @@ data SplitStrategy = SplitNow | SplitLater
 -- The 'ChangeIndicator' indicates whether at least one non-trivial equality
 -- was solved.
 
--- | @noContradictoryEqStore@ suceeds iff the equation store is not
+-- | @noContradictoryEqStore@ succeeds iff the equation store is not
 -- contradictory.
 noContradictoryEqStore :: Reduction ()
 noContradictoryEqStore = (contradictoryIf . eqsIsFalse) =<< getM sEqStore

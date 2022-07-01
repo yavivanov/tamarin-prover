@@ -2,8 +2,10 @@ theory injectivity begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1, pair/2, snd/1
+functions: fst/1[destructor], pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
 
 /* looping facts with injective instances: Inj/1 */
 
@@ -47,16 +49,16 @@ next
     case Copy
     solve( Inj( ~i.1 ) ▶₀ #k )
       case Copy
-      by contradiction /* non-injective facts (#vr.1,#j,#k) */
+      by contradiction /* cyclic */
     next
       case Init
-      by contradiction /* non-injective facts (#i,#j,#k) */
+      by contradiction /* cyclic */
     qed
   next
     case Init
     solve( Inj( ~i.1 ) ▶₀ #k )
       case Copy
-      by contradiction /* non-injective facts (#vr,#j,#k) */
+      by contradiction /* cyclic */
     qed
   qed
 qed
@@ -66,10 +68,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/features//injectivity/injectivity.spthy
@@ -77,8 +77,8 @@ analyzing: examples/features//injectivity/injectivity.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/features//injectivity/injectivity.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.060922s
+  output:          examples/features//injectivity/injectivity.spthy.tmp
+  processing time: 0.029280069s
   injectivity_check (all-traces): verified (9 steps)
 
 ------------------------------------------------------------------------------
@@ -88,8 +88,8 @@ summary of summaries:
 
 analyzed: examples/features//injectivity/injectivity.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.060922s
+  output:          examples/features//injectivity/injectivity.spthy.tmp
+  processing time: 0.029280069s
   injectivity_check (all-traces): verified (9 steps)
 
 ==============================================================================

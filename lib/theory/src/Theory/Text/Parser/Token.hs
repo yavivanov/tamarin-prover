@@ -1,4 +1,3 @@
-{-# LANGUAGE TupleSections #-}
 -- |
 -- Copyright   : (c) 2010-2012 Simon Meier, Benedikt Schmidt
 -- License     : GPL v3 (see LICENSE)
@@ -7,9 +6,12 @@
 -- Portability : portable
 --
 -- Tokenizing infrastructure
+
+{-# LANGUAGE FlexibleInstances #-}
 module Theory.Text.Parser.Token (
+    lexeme
   -- * Symbols
-    symbol
+  , symbol
   , symbol_
   , dot
   , comma
@@ -21,23 +23,37 @@ module Theory.Text.Parser.Token (
   -- ** Formal comments
   , formalComment
 
+  -- ** File Path
+  , filePath
+
   -- * Identifiers and Variables
   , identifier
   , indexedIdentifier
 
+  , hexColor
+
   , freshName
   , pubName
 
+
+  , typep
   , sortedLVar
   , lvar
   , msgvar
   , nodevar
+  , sapicvar
+  , sapicpatternvar
+  , sapicnodevar
+
+  , letIdentifier
 
   -- * Operators
 --  , opDiff
 
   , opExp
   , opMult
+
+  , opXor
 
   , opEqual
   , opLess
@@ -51,6 +67,12 @@ module Theory.Text.Parser.Token (
   , opLNot
   , opLFalse
   , opLTrue
+
+  , opParallel
+  , opParallelDepr
+  , opSeq
+  , opNDC
+  , opNull
 
   , opRequires
   , opChain
@@ -81,36 +103,86 @@ module Theory.Text.Parser.Token (
   , commaSep1
   , list
 
+  -- * Parsing State
+  , ParserState(..)
+  , mkStateSig
+  , modifyStateSig
+  , modifyStateFlag
+
     -- * Basic Parsing
   , Parser
   , parseFile
+  , parseFileWState
   , parseString
-  ) where
+  ,opLessTerm) where
 
 import           Prelude             hiding (id, (.))
 
 import           Data.Foldable       (asum)
+-- import           Data.Label
+-- import           Data.Binary
 import           Data.List (foldl')
+-- import           Control.DeepSeq
+import qualified Data.Set                   as S
+
+-- import           GHC.Generics                        (Generic)
 
 import           Control.Applicative hiding (empty, many, optional)
 import           Control.Category
 import           Control.Monad
 
+import           System.FilePath
+
 import           Text.Parsec         hiding ((<|>))
 import qualified Text.Parsec.Token   as T
 
 import           Theory
+import qualified Control.Monad.Catch as Catch
+import Data.Functor.Identity
+import Theory.Sapic.Pattern
+import Theory.Sapic
 
 
 ------------------------------------------------------------------------------
 -- Parser
 ------------------------------------------------------------------------------
 
+data ParserState = PState
+       { sig  :: MaudeSig              -- Current signature
+       , flags ::  S.Set String        -- Defined flags for pre-processing
+       }
+       deriving( Eq, Ord, Show )
+
+-- | A monoid instance to combine parser signatures.
+instance Semigroup ParserState where
+ PState sig1 flags1 <> PState sig2 flags2 =
+   PState (sig1 <> sig2) (flags1 `S.union` flags2)
+
+instance Monoid ParserState where
+  mempty = PState {sig=mempty, flags = S.empty}
+
+mkStateSig :: MaudeSig -> ParserState
+mkStateSig sign = mempty {sig=sign}
+
+modifyStateSig ::  Monad m => (MaudeSig -> MaudeSig) -> ParsecT s ParserState m ()
+modifyStateSig modifier = do
+   st <- getState
+   setState (st {sig = modifier $ sig st})
+
+modifyStateFlag ::  Monad m => (S.Set String -> S.Set String) -> ParsecT s ParserState m ()
+modifyStateFlag modifier = do
+   st <- getState
+   setState (st {flags = modifier $ flags st})
+
 -- | A parser for a stream of tokens.
-type Parser a = Parsec String MaudeSig a
+type Parser a = Parsec String ParserState a
+
+-- We can throw exceptions, but not catch them
+instance Catch.MonadThrow (ParsecT String ParserState Data.Functor.Identity.Identity) where
+    throwM e = fail (show e)
 
 -- Use Parsec's support for defining token parsers.
-spthy :: T.TokenParser MaudeSig
+spthy :: T.TokenParser ParserState
 spthy =
     T.makeTokenParser spthyStyle
   where
@@ -122,32 +194,49 @@ spthy =
       , T.identStart     = alphaNum
       , T.identLetter    = alphaNum <|> oneOf "_"
       , T.reservedNames  = ["in","let","rule","diff"]
-      , T.opStart        = oneOf ":!$%&*+./<=>?@\\^|-"
-      , T.opLetter       = oneOf ":!$%&*+./<=>?@\\^|-"
+      , T.opStart        = oneOf ":!$%&*+./<=>?@\\^|-#"
+      , T.opLetter       = oneOf ":!$%&*+./<=>?@\\^|-#"
       , T.reservedOpNames= []
       , T.caseSensitive  = True
       }
 
 -- | Run a parser on the contents of a file.
-parseFile :: Parser a -> FilePath -> IO a
-parseFile parser inFile = do
+parseFileWState :: ParserState -> Parser a -> FilePath -> IO a
+parseFileWState initState parser inFile = do
     inp <- readFile inFile
-    case parseString inFile parser inp of
+    case parseStringWState initState inFile parser inp of
         Right x  -> return x
         Left err -> error $ show err
 
 -- | Run a given parser on a given string.
-parseString :: FilePath
+parseStringWState :: ParserState
+            -> FilePath
             -- ^ Description of the source file. (For error reporting.)"
             -> Parser a
             -> String         -- ^ Input string.
             -> Either ParseError a
-parseString srcDesc parser =
-    runParser (T.whiteSpace spthy *> parser) pairMaudeSig srcDesc
+parseStringWState initState srcDesc parser =
+    runParser (T.whiteSpace spthy *> parser) initState srcDesc
                                            -- was "minimalMaudeSig" -> could lead to errors with parsing diff terms!
+
+-- | Run a given parser on a given string.
+parseString :: [String] -- flags
+            -> FilePath
+            -- ^ Description of the source file. (For error reporting.)"
+            -> Parser a
+            -> String         -- ^ Input string.
+            -> Either ParseError a
+parseString flags0 = parseStringWState $ mempty {sig=pairMaudeSig, flags=S.fromList flags0}
+
+parseFile :: [String] -> Parser a -> FilePath -> IO a
+parseFile flags0 = parseFileWState $ mempty {sig=pairMaudeSig, flags=S.fromList flags0}
+
 
 -- Token parsers
 ----------------
+
+lexeme :: ParsecT String ParserState Identity a -> ParsecT String ParserState Identity a
+lexeme = T.lexeme spthy
 
 -- | Parse a symbol.
 symbol :: String -> Parser String
@@ -210,16 +299,16 @@ naturalSubscript = T.lexeme spthy $ do
   where
     subscriptDigitToInteger d = toInteger $ fromEnum d - fromEnum '₀'
 
-    
--- | A comma separated list of elements.
+
+-- | A comma separated list of elements, optionally ended with a comma.
 commaSep :: Parser a -> Parser [a]
-commaSep = T.commaSep spthy
+commaSep = flip sepEndBy comma
 
--- | A comma separated non-empty list of elements.
+-- | A comma separated non-empty list of elements, optionally ended with a comma.
 commaSep1 :: Parser a -> Parser [a]
-commaSep1 = T.commaSep1 spthy
+commaSep1 = flip sepEndBy1 comma
 
--- | Parse a list of items '[' item ',' ... ',' item ']'
+-- | Parse a list of items '[' item ',' ... ',' item ']', or ended with ',]'
 list :: Parser a -> Parser [a]
 list = brackets . commaSep
 
@@ -253,6 +342,12 @@ indexedIdentifier :: Parser (String, Integer)
 indexedIdentifier = do
     (,) <$> identifier
         <*> option 0 (try (dot *> (fromIntegral <$> natural)))
+
+-- | Parse a hex RGB color code
+hexColor :: Parser String
+hexColor = T.lexeme spthy (singleQuoted hexCode <|> hexCode)
+  where
+    hexCode = optional (symbol "#") *> many1 hexDigit
 
 -- | Parse a logical variable with the given sorts allowed.
 sortedLVar :: [LSort] -> Parser LVar
@@ -296,6 +391,41 @@ freshName = try (symbol "~" *> singleQuoted identifier)
 pubName :: Parser String
 pubName = singleQuoted identifier
 
+-- | Parse a Sapic Type
+typep :: Parser SapicType
+typep = ( try (symbol defaultSapicTypeS) *> return Nothing)
+            <|> Just <$> identifier
+
+-- | Parse a variable in sapic that is typed:
+--   first parse for lvar, then parse for one more type
+--   so:
+--   ~x: foo
+--   $x: bar
+--   x: foo
+--   are all valid, but
+--   x: pub: foo
+--   is not
+sapicvar :: Parser SapicLVar
+sapicvar = do
+        v <- lvar
+        t <- option Nothing $ colon *> typep
+        return (SapicLVar v t)
+
+sapicpatternvar :: Parser PatternSapicLVar
+sapicpatternvar = do
+        eq <- option False parseq
+        v  <- sapicvar
+        return (if eq then PatternMatch v else PatternBind v)
+        where parseq = do
+                _ <- opEqual
+                return True
+
+
+sapicnodevar :: Parser SapicLVar
+sapicnodevar = do
+    v <- nodevar
+    return (SapicLVar v defaultSapicNodeType)
+
 
 -- Term Operators
 -----------------
@@ -319,9 +449,17 @@ opMult = symbol_ "*"
 opPlus :: Parser ()
 opPlus = symbol_ "+"
 
+-- | The xor operator @XOR@ or @⊕@.
+opXor :: Parser ()
+opXor = symbol_ "XOR" <|> symbol_ "⊕"
+
 -- | The timepoint comparison operator @<@.
 opLess :: Parser ()
 opLess = symbol_ "<"
+
+-- | The multiset comparison operator @(<)@. 
+opLessTerm :: Parser ()
+opLessTerm = symbol_ "(<)"
 
 -- | The action-at-timepoint operator \@.
 opAt :: Parser ()
@@ -372,7 +510,7 @@ opLTrue = symbol_ "⊤" <|> T.reserved spthy "T"
 
 -- | The requires-a-premise operator, @▶ subscript-idx@.
 opRequires :: Parser PremIdx
-opRequires = (PremIdx . fromIntegral) <$> (symbol "▶" *> naturalSubscript)
+opRequires = PremIdx . fromIntegral <$> (symbol "▶" *> naturalSubscript)
 
 -- | The chain operator @~~>@.
 opChain :: Parser ()
@@ -417,3 +555,37 @@ opLongleftarrow = symbol_ "<--"
 -- | The longrightarrow operator @-->@.
 opLongrightarrow :: Parser ()
 opLongrightarrow = symbol_ "-->"
+
+
+
+-- | The operator for parallel running processes @||@.
+opParallel :: Parser()
+opParallel = symbol_ "|"
+
+-- | The operator for parallel running processes @||@. (deprecated)
+opParallelDepr :: Parser()
+opParallelDepr = symbol_ "||"
+
+-- | The let identifier @let@.
+letIdentifier :: Parser()
+letIdentifier = symbol_ "let"
+
+-- | operator for sequential actions in processes
+opSeq :: Parser()
+opSeq = symbol_ ";"
+
+-- | operator for non-deterministic choice in processes
+opNDC :: Parser()
+opNDC = symbol_ "+"
+
+-- | Operator for 0-process (terminator of sequence)
+opNull :: Parser()
+opNull = symbol_ "0"
+
+
+-- File Path
+-- | Parse a file path, returned with the given prefix s
+filePath :: Parser FilePath
+filePath = many charDir
+  where
+    charDir = alphaNum <|> oneOf ("." <> [pathSeparator])

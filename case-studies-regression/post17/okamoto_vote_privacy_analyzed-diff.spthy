@@ -3,8 +3,8 @@ theory Okamoto_Vote_Privacy begin
 // Function signature and definition of the equational theory E
 
 builtins: multiset
-functions: blind/2, checksign/2, f/4, fst/1, open/2, pair/2, pk/1,
-           sign/2, snd/1, tdcommit/3, unblind/2
+functions: blind/2, checksign/2, f/4, fst/1[destructor], open/2, pair/2,
+           pk/1, sign/2, snd/1[destructor], tdcommit/3, unblind/2
 equations:
     checksign(sign(m, sk), pk(sk)) = m,
     f(m1, f(m, r, td, m1), td, m2) = f(m, r, td, m2),
@@ -15,6 +15,8 @@ equations:
     tdcommit(m2, f(m1, r, td, m2), td) = tdcommit(m1, r, td),
     unblind(blind(m, b), b) = m,
     unblind(sign(blind(m, b), sk), b) = sign(m, sk)
+
+
 
 rule (modulo E) Register_Voter_pk1:
    [ Fr( ~ltkV ) ]
@@ -11363,10 +11365,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/post17/okamoto_vote_privacy.spthy
@@ -11374,8 +11374,8 @@ analyzing: examples/post17/okamoto_vote_privacy.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/post17/okamoto_vote_privacy.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 97.630701s
+  output:          examples/post17/okamoto_vote_privacy.spthy.tmp
+  processing time: 341.792848282s
   RHS :  exec (exists-trace): verified (12 steps)
   LHS :  exec (exists-trace): verified (12 steps)
   DiffLemma:  Observational_equivalence : verified (3701 steps)
@@ -11387,8 +11387,8 @@ summary of summaries:
 
 analyzed: examples/post17/okamoto_vote_privacy.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 97.630701s
+  output:          examples/post17/okamoto_vote_privacy.spthy.tmp
+  processing time: 341.792848282s
   RHS :  exec (exists-trace): verified (12 steps)
   LHS :  exec (exists-trace): verified (12 steps)
   DiffLemma:  Observational_equivalence : verified (3701 steps)

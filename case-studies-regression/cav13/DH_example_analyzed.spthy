@@ -3,8 +3,13 @@ theory ex1 begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman
-functions: fst/1, g/0, mac/2, pair/2, shk/0 [private], snd/1
+functions: fst/1[destructor], g/0, mac/2, pair/2,
+           shk/0[private,destructor], snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
 
 rule (modulo E) Step1:
    [ Fr( ~tid ), Fr( ~x ) ]
@@ -29,20 +34,20 @@ rule (modulo E) Step2:
        z     = Y.7^~x.7
     
     2. ~x    = ~x.7
-       Y     = x.8^inv(~x.7)
-       z     = x.8
+       Y     = x.10^inv(~x.7)
+       z     = x.10
     
     3. ~x    = ~x.7
-       Y     = x.8^inv((~x.7*x.9))
-       z     = x.8^inv(x.9)
+       Y     = x.10^inv((~x.7*x.11))
+       z     = x.10^inv(x.11)
     
     4. ~x    = ~x.7
-       Y     = x.8^(x.9*inv(~x.7))
-       z     = x.8^x.9
+       Y     = x.10^(x.11*inv(~x.7))
+       z     = x.10^x.11
     
     5. ~x    = ~x.7
-       Y     = x.8^(x.10*inv((~x.7*x.9)))
-       z     = x.8^(x.10*inv(x.9))
+       Y     = x.10^(x.11*inv((~x.7*x.12)))
+       z     = x.10^(x.11*inv(x.12))
     
     6. ~x    = ~x.9
        Y     = x.7^x.8
@@ -78,7 +83,7 @@ solve( Step1( tid, A, B, ~x ) ▶₀ #i )
       case Step1_case_2
       by solve( !KU( ~x.1 ) @ #vk.4 )
     next
-      case cexp
+      case c_exp
       by solve( !KU( ~x ) @ #vk.6 )
     qed
   next
@@ -115,15 +120,19 @@ solve( Step1( tid, A, B, ~x ) ▶₀ #i )
   qed
 qed
 
+
+
+
+
+
+
 /* All well-formedness checks were successful. */
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/cav13/DH_example.spthy
@@ -131,8 +140,8 @@ analyzing: examples/cav13/DH_example.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/cav13/DH_example.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.209813s
+  output:          examples/cav13/DH_example.spthy.tmp
+  processing time: 0.11380966s
   Accept_Secret (all-traces): verified (9 steps)
   Accept_Secret_Counter (all-traces): falsified - found trace (7 steps)
 
@@ -143,8 +152,8 @@ summary of summaries:
 
 analyzed: examples/cav13/DH_example.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.209813s
+  output:          examples/cav13/DH_example.spthy.tmp
+  processing time: 0.11380966s
   Accept_Secret (all-traces): verified (9 steps)
   Accept_Secret_Counter (all-traces): falsified - found trace (7 steps)
 

@@ -15,6 +15,14 @@ module Term.Unification (
   , unifyLTermFactored
   , unifyLNTermFactored
 
+  -- * Unification without AC
+  , unifyLTermNoAC
+  , unifyLNTermNoAC
+  , unifiableLNTermsNoAC
+
+  , unifyLTermFactoredNoAC
+  , unifyLNTermFactoredNoAC
+
   -- * matching modulo AC
   -- ** Constructing matching problems
   , matchLVar
@@ -36,22 +44,27 @@ module Term.Unification (
   , enableDH
   , enableBP
   , enableMSet
+  , enableXor
   , enableDiff
   , minimalMaudeSig
   , enableDiffMaudeSig
   , dhMaudeSig
   , bpMaudeSig
+  , xorMaudeSig
   , msetMaudeSig
   , pairMaudeSig
   , symEncMaudeSig
   , asymEncMaudeSig
   , signatureMaudeSig
+  , locationReportMaudeSig
+  , revealSignatureMaudeSig
   , hashMaudeSig
   , rrulesForMaudeSig
   , stFunSyms
   , funSyms
   , stRules
   , irreducibleFunSyms
+  , reducibleFunSyms
   , noEqFunSyms
   , addFunSym
   , addCtxtStRule
@@ -83,7 +96,7 @@ import           Debug.Trace.Ignore
 ----------------------------------------------------------------------
 
 -- | @unifyLTerm sortOf eqs@ returns a complete set of unifiers for @eqs@ modulo AC.
-unifyLTermFactored :: (IsConst c , Show (Lit c LVar))
+unifyLTermFactored :: (IsConst c)
                    => (c -> LSort)
                    -> [Equal (LTerm c)]
                    -> WithMaude (LSubst c, [SubstVFresh c LVar])
@@ -105,7 +118,7 @@ unifyLNTermFactored :: [Equal LNTerm]
 unifyLNTermFactored = unifyLTermFactored sortOfName
 
 -- | @unifyLNTerm eqs@ returns a complete set of unifiers for @eqs@ modulo AC.
-unifyLTerm :: (IsConst c , Show (Lit c LVar))
+unifyLTerm :: (IsConst c)
            => (c -> LSort)
            -> [Equal (LTerm c)]
            -> WithMaude [SubstVFresh c LVar]
@@ -122,8 +135,46 @@ unifiableLNTerms t1 t2 = (not . null) <$> unifyLNTerm [Equal t1 t2]
 
 -- | Flatten a factored substitution to a list of substitutions.
 flattenUnif :: IsConst c => (LSubst c, [LSubstVFresh c]) -> [LSubstVFresh c]
-flattenUnif (subst, substs) = 
+flattenUnif (subst, substs) =
     (\res -> trace (show ("flattenUnif",subst, substs,res )) res) $ map (`composeVFresh` subst) substs
+
+-- Unification without AC
+----------------------------------------------------------------------
+
+-- | @unifyLTermFactoredAC sortOf eqs@ returns a complete set of unifiers for @eqs@ for terms without AC symbols.
+unifyLTermFactoredNoAC :: (IsConst c)
+                   => (c -> LSort)
+                   -> [Equal (LTerm c)]
+                   -> [(SubstVFresh c LVar)]
+unifyLTermFactoredNoAC sortOf eqs = (\res -> trace (unlines $ ["unifyLTermFactoredNoAC: "++ show eqs, "result = "++  show res]) res) $ do
+    solve $ execRWST unif sortOf M.empty
+  where
+    unif = sequence [ unifyRaw t p | Equal t p <- eqs ]
+    solve Nothing         = []
+    solve (Just (m, []))  = [freeToFreshRaw (substFromMap m)]
+    -- if delayed AC unifications occur, we fail
+    solve (Just _     )   = error "No AC unification, but AC symbol found."
+
+
+-- | @unifyLNTermFactoredNoAC sortOf eqs@ returns a complete set of unifiers for @eqs@ for terms without AC symbols.
+unifyLNTermFactoredNoAC :: [Equal LNTerm]
+                    -> [(SubstVFresh Name LVar)]
+unifyLNTermFactoredNoAC = unifyLTermFactoredNoAC sortOfName
+
+-- | @unifyLNTermNoAC eqs@ returns a complete set of unifiers for @eqs@  for terms without AC symbols.
+unifyLTermNoAC :: (IsConst c)
+           => (c -> LSort)
+           -> [Equal (LTerm c)]
+           -> [SubstVFresh c LVar]
+unifyLTermNoAC sortOf eqs = unifyLTermFactoredNoAC sortOf eqs
+
+-- | @unifyLNTermNoAC eqs@ returns a complete set of unifiers for @eqs@  for terms without AC symbols.
+unifyLNTermNoAC :: [Equal LNTerm] -> [SubstVFresh Name LVar]
+unifyLNTermNoAC = unifyLTermNoAC sortOfName
+
+-- | 'True' iff the terms are unifiable.
+unifiableLNTermsNoAC :: LNTerm -> LNTerm -> Bool
+unifiableLNTermsNoAC t1 t2 = not $ null $ unifyLNTermNoAC [Equal t1 t2]
 
 -- Matching modulo AC
 ----------------------------------------------------------------------
@@ -216,9 +267,11 @@ unifyRaw l0 r0 = do
 
 data MatchFailure = NoMatcher | ACProblem
 
+instance Semigroup MatchFailure where
+  _ <> _ = NoMatcher
+
 instance Monoid MatchFailure where
   mempty = NoMatcher
-  mappend _ _ = NoMatcher
 
 -- | Ensure that the computed substitution @sigma@ satisfies
 -- @t ==_AC apply sigma p@ after the delayed equations are solved.

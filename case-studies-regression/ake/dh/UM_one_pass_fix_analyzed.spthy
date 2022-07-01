@@ -3,8 +3,14 @@ theory UM_one_pass_fix begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman
-functions: fst/1, h/1, pair/2, snd/1
+functions: fst/1[destructor], h/1, pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
 
 rule (modulo E) Register_key_honest:
    [ Fr( ~ea ) ]
@@ -96,8 +102,8 @@ rule (modulo E) R_Complete:
        z     = x.270^x.271
     
     6. ~eb   = ~eb.139
-       X     = x.271^(x.273*inv((~eb.139*x.272)))
-       z     = x.271^(x.273*inv(x.272))
+       X     = x.271^(x.272*inv((~eb.139*x.273)))
+       z     = x.271^(x.272*inv(x.273))
   */
 
 rule (modulo E) R_Expire:
@@ -333,7 +339,7 @@ solve( (¬(role = 'I'))  ∥
                         case Register_key_honest
                         by solve( !KU( ~ex ) @ #vk.9 )
                       next
-                        case cexp
+                        case c_exp
                         solve( !KU( ~eb ) @ #vk.11 )
                           case Corrupt_Ltk
                           by contradiction /* from formulas */
@@ -427,7 +433,7 @@ solve( (¬(role = 'I'))  ∥
                   by contradiction /* from formulas */
                 qed
               next
-                case cexp
+                case c_exp
                 solve( !KU( ~eb ) @ #vk.11 )
                   case Corrupt_Ltk
                   by contradiction /* from formulas */
@@ -476,7 +482,7 @@ next
                       case Register_key_honest
                       by solve( !KU( ~ex ) @ #vk.7 )
                     next
-                      case cexp
+                      case c_exp
                       solve( !KU( ~ea ) @ #vk.9 )
                         case Corrupt_Ltk
                         by contradiction /* from formulas */
@@ -526,7 +532,7 @@ next
                   case Register_key_honest
                   by solve( !KU( ~ex ) @ #vk.8 )
                 next
-                  case cexp
+                  case c_exp
                   solve( !KU( ~eb ) @ #vk.10 )
                     case Corrupt_Ltk
                     by contradiction /* from formulas */
@@ -576,7 +582,7 @@ next
                       case Register_key_honest
                       by solve( !KU( ~ex ) @ #vk.7 )
                     next
-                      case cexp
+                      case c_exp
                       solve( !KU( ~ea ) @ #vk.9 )
                         case Corrupt_Ltk
                         by contradiction /* from formulas */
@@ -626,7 +632,7 @@ next
                         case Register_key_honest
                         by solve( !KU( ~ex ) @ #vk.9 )
                       next
-                        case cexp
+                        case c_exp
                         solve( !KU( ~eb ) @ #vk.11 )
                           case Corrupt_Ltk
                           by contradiction /* from formulas */
@@ -674,7 +680,7 @@ next
                   case Register_key_honest
                   by solve( !KU( ~ex ) @ #vk.8 )
                 next
-                  case cexp
+                  case c_exp
                   solve( !KU( ~eb ) @ #vk.10 )
                     case Corrupt_Ltk
                     by contradiction /* from formulas */
@@ -759,7 +765,7 @@ next
                   by contradiction /* from formulas */
                 qed
               next
-                case cexp
+                case c_exp
                 solve( !KU( ~eb ) @ #vk.11 )
                   case Corrupt_Ltk
                   by contradiction /* from formulas */
@@ -778,10 +784,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/ake/dh/UM_one_pass_fix.spthy
@@ -789,8 +793,8 @@ analyzing: examples/ake/dh/UM_one_pass_fix.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/ake/dh/UM_one_pass_fix.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 2.547105s
+  output:          examples/ake/dh/UM_one_pass_fix.spthy.tmp
+  processing time: 2.458205496s
   key_agreement_reachable (exists-trace): verified (10 steps)
   CK_secure (all-traces): verified (170 steps)
 
@@ -801,8 +805,8 @@ summary of summaries:
 
 analyzed: examples/ake/dh/UM_one_pass_fix.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 2.547105s
+  output:          examples/ake/dh/UM_one_pass_fix.spthy.tmp
+  processing time: 2.458205496s
   key_agreement_reachable (exists-trace): verified (10 steps)
   CK_secure (all-traces): verified (170 steps)
 

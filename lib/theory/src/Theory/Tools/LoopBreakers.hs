@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- |
 -- Copyright   : (c) 2012 Simon Meier
@@ -44,6 +45,8 @@ premSolvingRelAC ePrems eConcs eVariants rules = reader $ \hnd -> do
         ruFrom <- rules
         ruTo   <- rules
         (premIdx, premFa0) <- ePrems ruTo
+        -- NoSource Facts are already explicitly excluded from precomputation
+        guard $ not (isNoSourcesFact premFa0)
         guard $ or $ do
             premFa <- instances ruTo premFa0
             concFa <- instances ruFrom =<< (snd <$> eConcs ruFrom)

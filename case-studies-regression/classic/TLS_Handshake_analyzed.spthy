@@ -2,14 +2,25 @@ theory TLS_Handshake begin
 
 // Function signature and definition of the equational theory E
 
-functions: PRF/1, adec/2, aenc/2, fst/1, h/1, pair/2, pk/1, sdec/2,
-           senc/2, sign/2, snd/1, true/0, verify/3
+functions: PRF/1, adec/2[destructor], aenc/2, fst/1[destructor], h/1,
+           pair/2, pk/1, sdec/2[destructor], senc/2, sign/2, snd/1[destructor],
+           true/0, verify/3[destructor]
 equations:
     adec(aenc(x.1, pk(x.2)), x.2) = x.1,
     fst(<x.1, x.2>) = x.1,
     sdec(senc(x.1, x.2), x.2) = x.1,
     snd(<x.1, x.2>) = x.2,
     verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+
+
+
+
+
+
+
+
+
 
 section{* TLS Handshake *}
 
@@ -150,12 +161,12 @@ rule (modulo E) S_2:
        z     = verify(signature.37, <'32', h(<'32', ns.31, S.28, pms.34>)>,
                       pkC.33)
     
-    2. S     = S.129
-       ns    = ns.132
-       pkC   = pk(x.255)
-       pms   = pms.135
+    2. S     = S.132
+       ns    = ns.135
+       pkC   = pk(x.261)
+       pms   = pms.138
        signature
-             = sign(<'32', h(<'32', ns.132, S.129, pms.135>)>, x.255)
+             = sign(<'32', h(<'32', ns.135, S.132, pms.138>)>, x.261)
        z     = true
   */
 
@@ -725,15 +736,15 @@ solve( SessionKeys( S, C, keyS, keyC ) @ #k )
   qed
 qed
 
+
+
 /* All well-formedness checks were successful. */
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/classic/TLS_Handshake.spthy
@@ -741,8 +752,8 @@ analyzing: examples/classic/TLS_Handshake.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/classic/TLS_Handshake.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 3.795252s
+  output:          examples/classic/TLS_Handshake.spthy.tmp
+  processing time: 5.772305122s
   session_key_secrecy (all-traces): verified (95 steps)
   injective_agree (all-traces): verified (44 steps)
   session_key_setup_possible (exists-trace): verified (11 steps)
@@ -754,8 +765,8 @@ summary of summaries:
 
 analyzed: examples/classic/TLS_Handshake.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 3.795252s
+  output:          examples/classic/TLS_Handshake.spthy.tmp
+  processing time: 5.772305122s
   session_key_secrecy (all-traces): verified (95 steps)
   injective_agree (all-traces): verified (44 steps)
   session_key_setup_possible (exists-trace): verified (11 steps)

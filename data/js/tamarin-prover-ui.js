@@ -155,6 +155,8 @@ var ui = {
             65  : function() { mainDisplay.applyProver('characterization'); },          // A
             98  : function() { mainDisplay.applyProver('bounded-autoprove'); },         // b
             66  : function() { mainDisplay.applyProver('bounded-characterization'); },  // B
+            115 : function() { mainDisplay.applyProver('autoprove-all'); },             // s
+            83  : function() { mainDisplay.applyProver('characterization-all'); },      // S
             74  : function() { proofScript.jump('next/smart', null); },  // j
             75  : function() { proofScript.jump('prev/smart', null); },  // k
             106 : function() { proofScript.jump('next/normal', null); }, // J
@@ -641,13 +643,27 @@ var mainDisplay = {
     },
 
     /**
-     * Apply a prover to the currently selected constraint system.
+     * Apply a prover to the currently selected constraint system,
+     * or to the first sorry-step when no constraint system is selected.
      * @param prover The CSS style of the link to the prover
      */
     applyProver: function(prover) {
         var auto = $("#ui-main-display").find("a.internal-link." + prover);
 
-        if(auto.length >= 1) $(auto.get(0)).click();
+        if(auto.length >= 1) {
+            $(auto.get(0)).click();
+        } else {
+            var firstStep = $("#proof").find("a.internal-link.sorry-step");
+
+            if(firstStep.length >= 1) {
+                $.when( $(firstStep.get(0)).click( ) ).done( function(  ) {
+                    setTimeout(function(){ 
+                        var autoP = $("#ui-main-display").find("a.internal-link." + prover );
+                        $(autoP.get(0)).click();
+                    }, 300);
+                });
+            }
+        }
     },
 
     /**

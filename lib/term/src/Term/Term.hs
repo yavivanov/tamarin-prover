@@ -17,11 +17,14 @@ module Term.Term (
 
     -- ** Smart constructors
     , fAppOne
+    , fAppZero
+    , fAppDHNeutral
     , fAppDiff
     , fAppExp
     , fAppInv
     , fAppPMult
     , fAppEMap
+    , fAppUnion
     , fAppPair
     , fAppFst
     , fAppSnd
@@ -31,18 +34,24 @@ module Term.Term (
     , isDiff
     , isInverse
     , isProduct
+    , isXor
     , isUnion
     , isEMap
     , isNullaryPublicFunction
     , isPrivateFunction
+    , isAC
     , getLeftTerm
     , getRightTerm
+
+    -- ** "Protected" subterms
+    , allProtSubterms
 
     -- * AC, C, and NonAC funcion symbols
     , FunSym(..)
     , ACSym(..)
     , CSym(..)
     , Privacy(..)
+    , Constructability(..)
     , NoEqSym
 
     -- ** Signatures
@@ -51,32 +60,42 @@ module Term.Term (
 
     -- ** concrete symbols strings
     , diffSymString
+    , munSymString 
     , expSymString
     , invSymString
     , pmultSymString
     , emapSymString
     , unionSymString
-    
+    , oneSymString
+    , dhNeutralSymString
+    , multSymString
+    , zeroSymString
+    , xorSymString
+
     -- ** Function symbols
     , diffSym
     , expSym
     , pmultSym
+    , oneSym
+    , zeroSym
+    , dhNeutralSym
 
     -- ** concrete signatures
     , dhFunSig
     , bpFunSig
     , msetFunSig
+    , xorFunSig
     , pairFunSig
     , dhReducibleFunSig
     , bpReducibleFunSig
+    , xorReducibleFunSig
     , implicitFunSig
 
     , module Term.Term.Classes
     , module Term.Term.Raw
-
     ) where
 
-import           Data.Monoid
+-- import           Data.Monoid
 -- import           Data.Foldable (foldMap)
 
 import qualified Data.ByteString.Char8 as BC
@@ -96,14 +115,21 @@ import           Term.Term.Raw
 fAppOne :: Term a
 fAppOne = fAppNoEq oneSym []
 
+fAppDHNeutral :: Term a
+fAppDHNeutral = fAppNoEq dhNeutralSym []
+
+fAppZero :: Term a
+fAppZero = fAppNoEq zeroSym []
+
 -- | Smart constructors for diff, pair, exp, pmult, and emap.
-fAppDiff, fAppPair, fAppExp,fAppPMult :: (Term a, Term a) -> Term a
+fAppDiff, fAppPair, fAppExp, fAppPMult :: (Term a, Term a) -> Term a
 fAppDiff (x,y)  = fAppNoEq diffSym  [x, y]
 fAppPair (x,y)  = fAppNoEq pairSym  [x, y]
 fAppExp  (b,e)  = fAppNoEq expSym   [b, e]
 fAppPMult (s,p) = fAppNoEq pmultSym [s, p]
-fAppEMap :: Ord a => (Term a, Term a) -> Term a
+fAppEMap,fAppUnion :: Ord a => (Term a, Term a) -> Term a
 fAppEMap  (x,y) = fAppC    EMap     [x, y]
+fAppUnion (x,y) = fAppAC    Union     [x, y]
 
 -- | Smart constructors for inv, fst, and snd.
 fAppInv, fAppFst, fAppSnd :: Term a -> Term a
@@ -139,6 +165,11 @@ isProduct :: Show a => Term a -> Bool
 isProduct (viewTerm2 -> FMult _) = True
 isProduct _                      = False
 
+-- | 'True' iff the term is a well-formed xor.
+isXor :: Show a => Term a -> Bool
+isXor (viewTerm2 -> FXor _) = True
+isXor _                     = False
+
 -- | 'True' iff the term is a well-formed emap.
 isEMap :: Show a => Term a -> Bool
 isEMap (viewTerm2 -> FEMap _ _) = True
@@ -151,12 +182,17 @@ isUnion _                       = False
 
 -- | 'True' iff the term is a nullary, public function.
 isNullaryPublicFunction :: Term a -> Bool
-isNullaryPublicFunction (viewTerm -> FApp (NoEq (_, (0, Public))) _) = True
+isNullaryPublicFunction (viewTerm -> FApp (NoEq (_, (0, Public,_))) _) = True
 isNullaryPublicFunction _                                            = False
 
 isPrivateFunction :: Term a -> Bool
-isPrivateFunction (viewTerm -> FApp (NoEq (_, (_,Private))) _) = True
+isPrivateFunction (viewTerm -> FApp (NoEq (_, (_,Private,_))) _) = True
 isPrivateFunction _                                            = False
+
+-- | 'True' iff the term is an AC-operator.
+isAC :: Show a => Term a -> Bool
+isAC (viewTerm -> FApp (AC _) _) = True
+isAC _                           = False
 
 ----------------------------------------------------------------------
 -- Convert Diff Terms
@@ -177,6 +213,20 @@ getLeftTerm t = getSide DiffLeft t
 
 getRightTerm :: Term a -> Term a
 getRightTerm t = getSide DiffRight t
+
+----------------------------------------------------------------------
+-- "protected" subterms
+-- NB: here anything but a pair or an AC symbol is protected!
+----------------------------------------------------------------------
+
+-- Given a term, compute all protected subterms, i.e. all terms
+-- which top symbol is a function, but not a pair, nor an AC symbol
+allProtSubterms :: Show a => Term a -> [Term a]
+allProtSubterms t@(viewTerm -> FApp _ as) | isPair t || isAC t
+        = concatMap allProtSubterms as
+allProtSubterms t@(viewTerm -> FApp _ as) | otherwise
+        = t:concatMap allProtSubterms as
+allProtSubterms _                                     = []
 
 ----------------------------------------------------------------------
 -- Pretty printing
@@ -206,6 +256,7 @@ prettyTerm ppLit = ppTerm
 
     ppACOp Mult  = "*"
     ppACOp Union = "+"
+    ppACOp Xor   = "⊕"
 
     ppTerms sepa n lead finish ts =
         fcat . (text lead :) . (++[text finish]) .

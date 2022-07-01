@@ -3,8 +3,14 @@ theory JKL_TS1_2008_KI begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman
-functions: fst/1, h/1, pair/2, snd/1
+functions: fst/1[destructor], h/1, pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
 
 section{* Jeong, Katz, Lee : TS1 (2008) *}
 
@@ -116,7 +122,7 @@ solve( Init_1( ~ekI, $I, $R, ~lkI, ~ekI ) ▶₀ #i1 )
     next
       case c_h
       solve( !KU( 'g'^(~lkI*~lkR) ) @ #vk.9 )
-        case cexp
+        case c_exp
         solve( !KU( ~lkI ) @ #vk.12 )
           case Ltk_reveal
           by contradiction /* from formulas */
@@ -183,7 +189,7 @@ solve( !Ltk( $R, ~lkR ) ▶₂ #i1 )
     next
       case c_h
       solve( !KU( 'g'^(~lkI*~lkR) ) @ #vk.9 )
-        case cexp
+        case c_exp
         solve( !KU( ~lkI ) @ #vk.12 )
           case Ltk_reveal
           by contradiction /* from formulas */
@@ -210,10 +216,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/csf12/JKL_TS1_2008_KI.spthy
@@ -221,8 +225,8 @@ analyzing: examples/csf12/JKL_TS1_2008_KI.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/csf12/JKL_TS1_2008_KI.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.258105s
+  output:          examples/csf12/JKL_TS1_2008_KI.spthy.tmp
+  processing time: 0.281812421s
   JKL2008_1_initiator_key (all-traces): verified (15 steps)
   JKL2008_1_responder_key (all-traces): verified (15 steps)
 
@@ -233,8 +237,8 @@ summary of summaries:
 
 analyzed: examples/csf12/JKL_TS1_2008_KI.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 0.258105s
+  output:          examples/csf12/JKL_TS1_2008_KI.spthy.tmp
+  processing time: 0.281812421s
   JKL2008_1_initiator_key (all-traces): verified (15 steps)
   JKL2008_1_responder_key (all-traces): verified (15 steps)
 

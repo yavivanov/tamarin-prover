@@ -1,12 +1,17 @@
-theory NSLPK3 begin
+theory NSPK3 begin
 
 // Function signature and definition of the equational theory E
 
-functions: adec/2, aenc/2, fst/1, pair/2, pk/1, snd/1
+functions: adec/2[destructor], aenc/2, fst/1[destructor], pair/2, pk/1,
+           snd/1[destructor]
 equations:
     adec(aenc(x.1, pk(x.2)), x.2) = x.1,
     fst(<x.1, x.2>) = x.1,
     snd(<x.1, x.2>) = x.2
+
+
+
+
 
 rule (modulo E) Register_pk:
    [ Fr( ~ltkA ) ]
@@ -357,10 +362,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/classic/NSPK3.spthy
@@ -368,8 +371,8 @@ analyzing: examples/classic/NSPK3.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/classic/NSPK3.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 2.39073s
+  output:          examples/classic/NSPK3.spthy.tmp
+  processing time: 3.631439739s
   types (all-traces): verified (33 steps)
   nonce_secrecy (all-traces): falsified - found trace (16 steps)
   injective_agree (all-traces): falsified - found trace (14 steps)
@@ -382,8 +385,8 @@ summary of summaries:
 
 analyzed: examples/classic/NSPK3.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 2.39073s
+  output:          examples/classic/NSPK3.spthy.tmp
+  processing time: 3.631439739s
   types (all-traces): verified (33 steps)
   nonce_secrecy (all-traces): falsified - found trace (16 steps)
   injective_agree (all-traces): falsified - found trace (14 steps)

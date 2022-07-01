@@ -3,9 +3,11 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeOperators              #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 -- |
 -- Copyright   : (c) 2010-2012 Benedikt Schmidt & Simon Meier
 -- License     : GPL v3 (see LICENSE)
@@ -28,23 +30,36 @@ module Theory.Model.Rule (
   , rActs
   , rPrem
   , rConc
+  , rNewVars
   , lookupPrem
   , lookupConc
   , enumPrems
   , enumConcs
+
+  -- ** Extended positions
+  , ExtendedPosition
+  , printPosition
+  , printFactPosition
 
   -- ** Genereal protocol and intruder rules
   , RuleInfo(..)
   , ruleInfo
 
   -- * Protocol Rule Information
+  , RuleAttribute(..)
   , ProtoRuleName(..)
+  , ProtoRuleEInfo(..)
+  , preName
+  , preAttributes
+  , preRestriction
   , ProtoRuleACInfo(..)
   , pracName
+  , pracAttributes
   , pracVariants
   , pracLoopBreakers
   , ProtoRuleACInstInfo(..)
   , praciName
+  , praciAttributes
   , praciLoopBreakers
   , RuleACConstrs
 
@@ -60,6 +75,7 @@ module Theory.Model.Rule (
 
   -- ** Queries
   , HasRuleName(..)
+  , HasRuleAttributes(..)
   , isIntruderRule
   , isDestrRule
   , isIEqualityRule
@@ -82,6 +98,9 @@ module Theory.Model.Rule (
   , isTrivialProtoVariantAC
   , getNewVariables
   , getSubstitutionsFixingNewVars
+  , compareRulesUpToNewVars
+  , equalUpToAddedActions
+  , equalUpToTerms
 
   -- ** Conversion
   , ruleACToIntrRuleAC
@@ -89,6 +108,9 @@ module Theory.Model.Rule (
   , ruleACIntrToRuleACInst
   , getLeftRule
   , getRightRule
+  , constrRuleToDestrRule
+  , destrRuleToConstrRule
+  , destrRuleToDestrRule
 
   -- ** Construction
   , someRuleACInst
@@ -99,25 +121,38 @@ module Theory.Model.Rule (
   , removeDiffLabel
   , multRuleInstance
   , unionRuleInstance
+  , xorRuleInstance
+  , addAction
 
   -- ** Unification
   , unifyRuleACInstEqs
   , unifiableRuleACInsts
+  , equalRuleUpToRenaming
+  , equalRuleUpToAnnotations
+  , equalRuleUpToDiffAnnotation
+  , equalRuleUpToDiffAnnotationSym
 
   -- * Pretty-Printing
   , reservedRuleNames
   , showRuleCaseName
+  , prettyRule
+  , prettyRuleRestrGen
+  , prettyRuleRestr
   , prettyProtoRuleName
   , prettyRuleName
+  , prettyRuleAttribute
   , prettyProtoRuleE
   , prettyProtoRuleAC
+  , prettyProtoRuleACasE
   , prettyIntrRuleAC
   , prettyIntrRuleACInfo
   , prettyRuleAC
   , prettyLoopBreakers
   , prettyRuleACInst
+  , prettyProtoRuleACInstInfo
+  , prettyInstLoopBreakers
 
-  )  where
+  , prettyIntruderVariants)  where
 
 import           Prelude              hiding (id, (.))
 
@@ -130,7 +165,8 @@ import           Data.List
 import qualified Data.Set              as S
 import qualified Data.Map              as M
 import           Data.Monoid
-import           Data.Maybe            (fromMaybe)
+-- import           Data.Maybe            (fromMaybe)
+import           Data.Color
 import           Safe
 
 -- import           Control.Basics
@@ -144,10 +180,14 @@ import qualified Extension.Data.Label as L
 import           Logic.Connectives
 
 import           Term.LTerm
-import           Term.Rewriting.Norm  (nf')
+import           Term.Positions
+import           Term.Rewriting.Norm  (nf', norm')
+import           Term.Builtin.Convenience (var)
 import           Term.Unification
 import           Theory.Model.Fact
+import qualified Theory.Model.Formula as F
 import           Theory.Text.Pretty
+import           Theory.Sapic
 
 -- import           Debug.Trace
 
@@ -158,12 +198,14 @@ import           Theory.Text.Pretty
 -- | Rewriting rules with arbitrary additional information and facts with names
 -- and logical variables.
 data Rule i = Rule {
-         _rInfo  :: i
-       , _rPrems :: [LNFact]
-       , _rConcs :: [LNFact]
-       , _rActs  :: [LNFact]
+         _rInfo    :: i
+       , _rPrems   :: [LNFact]
+       , _rConcs   :: [LNFact]
+       , _rActs    :: [LNFact]
+       -- contains initially the new variables, then their instantiations
+       , _rNewVars :: [LNTerm]
        }
-       deriving( Eq, Ord, Show, Data, Typeable, Generic)
+       deriving(Eq, Ord, Show, Data, Typeable, Generic)
 
 instance NFData i => NFData (Rule i)
 instance Binary i => Binary (Rule i)
@@ -205,27 +247,62 @@ enumConcs = zip [(ConcIdx 0)..] . L.get rConcs
 -- Instances
 ------------
 
+-- we need special instances for Eq and Ord to ignore the new variable instantiations when comparing rules
+-- instance (Eq t) => Eq (Rule t) where
+--     (Rule i0 ps0 cs0 as0 _) == (Rule i1 ps1 cs1 as1 _) =
+--         (i0 == i1) && (ps0 == ps1) && (cs0 == cs1) && (as0 == as1)
+
+compareRulesUpToNewVars :: (Ord i) => Rule i -> Rule i -> Ordering
+compareRulesUpToNewVars (Rule i0 ps0 cs0 as0 _) (Rule i1 ps1 cs1 as1 _) =
+        if i0 == i1 then
+           if ps0 == ps1 then
+              if cs0 == cs1 then
+                   compare as0 as1
+                 else
+                   compare cs0 cs1
+              else
+                 compare ps0 ps1
+           else
+              compare i0 i1
+
+-- deriving instance (Ord t) => Ord (Rule t)
+
 instance Functor Rule where
-    fmap f (Rule i ps cs as) = Rule (f i) ps cs as
+    fmap f (Rule i ps cs as nvs) = Rule (f i) ps cs as nvs
 
 instance (Show i, HasFrees i) => HasFrees (Rule i) where
-    foldFrees f (Rule i ps cs as) =
+    foldFrees f (Rule i ps cs as nvs) =
         (foldFrees f i  `mappend`) $
         (foldFrees f ps `mappend`) $
         (foldFrees f cs `mappend`) $
-        (foldFrees f as)
-    foldFreesOcc f c (Rule i ps cs as) =
+        (foldFrees f as `mappend`) $
+        (foldFrees f nvs)
+    -- We do not include the new variables in the occurrences
+    foldFreesOcc f c (Rule i ps cs as _) =
         foldFreesOcc f ((show i):c) (ps, cs, as)
-    mapFrees f (Rule i ps cs as) =
+    mapFrees f (Rule i ps cs as nvs) =
         Rule <$> mapFrees f i
              <*> mapFrees f ps <*> mapFrees f cs <*> mapFrees f as
+             <*> mapFrees f nvs
 
-instance Apply i => Apply (Rule i) where
-    apply subst (Rule i ps cs as) =
-        Rule (apply subst i) (apply subst ps) (apply subst cs) (apply subst as)
+instance Apply LNSubst i => Apply LNSubst (Rule i) where
+    apply subst (Rule i ps cs as nvs) =
+        Rule (apply subst i) (apply subst ps) (apply subst cs) (apply subst as) (apply subst nvs)
 
 instance Sized (Rule i) where
-  size (Rule _ ps cs as) = size ps + size cs + size as
+  size (Rule _ ps cs as _) = size ps + size cs + size as
+
+-----------------------------------------------
+-- Extended Positions (of a term inside a rule)
+-----------------------------------------------
+
+type ExtendedPosition = (PremIdx, Int, Position)
+
+printPosition :: ExtendedPosition -> String
+printPosition (pidx, i, pos) = show (getPremIdx pidx) ++ "_" ++ show i ++ "_" ++ foldl (\x y -> x ++ show y  ++ "_") "" pos
+
+printFactPosition :: ExtendedPosition -> String
+printFactPosition (pidx, _, _) = show (getPremIdx pidx)
 
 ------------------------------------------------------------------------------
 -- Rule information split into intruder rule and protocol rules
@@ -256,7 +333,7 @@ instance (HasFrees p, HasFrees i) => HasFrees (RuleInfo p i) where
     mapFrees   f = ruleInfo (fmap ProtoInfo . mapFrees   f)
                             (fmap IntrInfo . mapFrees   f)
 
-instance (Apply p, Apply i) => Apply (RuleInfo p i) where
+instance (Apply s p, Apply s i) => Apply s (RuleInfo p i) where
     apply subst = ruleInfo (ProtoInfo . apply subst) (IntrInfo . apply subst)
 
 
@@ -264,46 +341,75 @@ instance (Apply p, Apply i) => Apply (RuleInfo p i) where
 -- Protocol Rule Information
 ------------------------------------------------------------------------------
 
+-- | An attribute for a Rule, which does not affect the semantics.
+data RuleAttribute = RuleColor (RGB Rational) -- Color for display
+                   | Process (PlainProcess)-- Process: for display, but also to recognise
+                             -- lookup rule generated by SAPIC
+                             -- which needs relaxed treatment in wellformedness check
+                             -- TODO This type has no annotations, to avoid
+                             -- dependency to Sapic.Annotations
+                             -- need to see what we need here later.
+       deriving( Eq, Ord, Show, Data, Generic)
+instance NFData RuleAttribute
+instance Binary RuleAttribute
+
 -- | A name of a protocol rule is either one of the special reserved rules or
 -- some standard rule.
 data ProtoRuleName =
          FreshRule
        | StandRule String -- ^ Some standard protocol rule
        deriving( Eq, Ord, Show, Data, Typeable, Generic)
-
 instance NFData ProtoRuleName
 instance Binary ProtoRuleName
 
+-- | Information for protocol rules modulo E.
+data ProtoRuleEInfo = ProtoRuleEInfo
+       { _preName       :: ProtoRuleName
+       , _preAttributes :: [RuleAttribute]
+       , _preRestriction:: [F.SyntacticLNFormula]
+       }
+       deriving( Eq, Ord, Show, Data, Generic)
+instance NFData ProtoRuleEInfo
+instance Binary ProtoRuleEInfo
 
 -- | Information for protocol rules modulo AC. The variants list the possible
 -- instantiations of the free variables of the rule. The source is interpreted
 -- modulo AC; i.e., its variants were also built.
 data ProtoRuleACInfo = ProtoRuleACInfo
        { _pracName         :: ProtoRuleName
+       , _pracAttributes   :: [RuleAttribute]
        , _pracVariants     :: Disj (LNSubstVFresh)
        , _pracLoopBreakers :: [PremIdx]
        }
-       deriving( Eq, Ord, Show, Generic)
+       deriving(Eq, Ord, Show, Generic)
 instance NFData ProtoRuleACInfo
 instance Binary ProtoRuleACInfo
 
 -- | Information for instances of protocol rules modulo AC.
 data ProtoRuleACInstInfo = ProtoRuleACInstInfo
        { _praciName         :: ProtoRuleName
+       , _praciAttributes   :: [RuleAttribute]
        , _praciLoopBreakers :: [PremIdx]
        }
-       deriving( Eq, Ord, Show, Generic)
+       deriving(Eq, Ord, Show, Generic)
 instance NFData ProtoRuleACInstInfo
 instance Binary ProtoRuleACInstInfo
 
 
-$(mkLabels [''ProtoRuleACInfo, ''ProtoRuleACInstInfo])
+$(mkLabels [''ProtoRuleEInfo, ''ProtoRuleACInfo, ''ProtoRuleACInstInfo])
 
 
 -- Instances
 ------------
+instance Apply s RuleAttribute where
+    apply _ = id
 
-instance Apply ProtoRuleName where
+instance HasFrees RuleAttribute where
+    foldFrees _ = const mempty
+    foldFreesOcc _ _ = const mempty
+    mapFrees  _ = pure
+
+instance Apply s ProtoRuleName where
     apply _ = id
 
 instance HasFrees ProtoRuleName where
@@ -311,7 +417,7 @@ instance HasFrees ProtoRuleName where
     foldFreesOcc  _ _ = const mempty
     mapFrees   _ = pure
 
-instance Apply PremIdx where
+instance Apply s PremIdx where
     apply _ = id
 
 instance HasFrees PremIdx where
@@ -319,7 +425,7 @@ instance HasFrees PremIdx where
     foldFreesOcc  _ _ = const mempty
     mapFrees   _ = pure
 
-instance Apply ConcIdx where
+instance Apply s ConcIdx where
     apply _ = id
 
 instance HasFrees ConcIdx where
@@ -327,25 +433,41 @@ instance HasFrees ConcIdx where
     foldFreesOcc  _ _ = const mempty
     mapFrees   _ = pure
 
-instance HasFrees ProtoRuleACInfo where
-    foldFrees f (ProtoRuleACInfo na vari breakers) =
-        foldFrees f na `mappend` foldFrees f vari
-                       `mappend` foldFrees f breakers
+instance HasFrees ProtoRuleEInfo where
+    foldFrees f (ProtoRuleEInfo na attr rstr) =
+        foldFrees f na `mappend` foldFrees f attr `mappend` foldFrees f rstr
     foldFreesOcc  _ _ = const mempty
-    mapFrees f (ProtoRuleACInfo na vari breakers) =
-        ProtoRuleACInfo na <$> mapFrees f vari <*> mapFrees f breakers
+    mapFrees f (ProtoRuleEInfo na attr rstr) =
+        ProtoRuleEInfo na <$> mapFrees f attr <*> mapFrees f rstr
 
-instance Apply ProtoRuleACInstInfo where
+instance Apply s ProtoRuleEInfo where
     apply _ = id
 
+instance HasFrees ProtoRuleACInfo where
+    foldFrees f (ProtoRuleACInfo na attr vari breakers) =
+        foldFrees f na `mappend` foldFrees f attr
+                       `mappend` foldFrees f vari
+                       `mappend` foldFrees f breakers
+    foldFreesOcc  _ _ = const mempty
+
+    mapFrees f (ProtoRuleACInfo na attr vari breakers) =
+        ProtoRuleACInfo na <$> mapFrees f attr
+                           <*> mapFrees f vari
+                           <*> mapFrees f breakers
+
+instance Apply s ProtoRuleACInstInfo where
+    apply subst (ProtoRuleACInstInfo na attr breakers) =
+        ProtoRuleACInstInfo (apply subst na) attr breakers
+
 instance HasFrees ProtoRuleACInstInfo where
-    foldFrees f (ProtoRuleACInstInfo na breakers) =
-        foldFrees f na `mappend` foldFrees f breakers
+    foldFrees f (ProtoRuleACInstInfo na attr breakers) =
+        foldFrees f na `mappend` foldFrees f attr
+                       `mappend` foldFrees f breakers
 
     foldFreesOcc  _ _ = const mempty
 
-    mapFrees f (ProtoRuleACInstInfo na breakers) =
-        ProtoRuleACInstInfo na <$> mapFrees f breakers
+    mapFrees f (ProtoRuleACInstInfo na attr breakers) =
+        ProtoRuleACInstInfo na <$> mapFrees f attr <*> mapFrees f breakers
 
 
 ------------------------------------------------------------------------------
@@ -374,21 +496,64 @@ type IntrRuleAC = Rule IntrRuleACInfo
 
 -- | Converts between these two types of rules, if possible.
 ruleACToIntrRuleAC :: RuleAC -> Maybe IntrRuleAC
-ruleACToIntrRuleAC (Rule (IntrInfo i) ps cs as) = Just (Rule i ps cs as)
-ruleACToIntrRuleAC _                            = Nothing
+ruleACToIntrRuleAC (Rule (IntrInfo i) ps cs as nvs) = Just (Rule i ps cs as nvs)
+ruleACToIntrRuleAC _                                = Nothing
 
 -- | Converts between these two types of rules.
 ruleACIntrToRuleAC :: IntrRuleAC -> RuleAC
-ruleACIntrToRuleAC (Rule ri ps cs as) = Rule (IntrInfo ri) ps cs as
+ruleACIntrToRuleAC (Rule ri ps cs as nvs) = Rule (IntrInfo ri) ps cs as nvs
 
 -- | Converts between these two types of rules.
 ruleACIntrToRuleACInst :: IntrRuleAC -> RuleACInst
-ruleACIntrToRuleACInst (Rule ri ps cs as) = Rule (IntrInfo ri) ps cs as
+ruleACIntrToRuleACInst (Rule ri ps cs as nvs) = Rule (IntrInfo ri) ps cs as nvs
+
+-- | Converts between constructor and destructor rules.
+constrRuleToDestrRule :: RuleAC -> Int -> Bool -> Bool -> [RuleAC]
+constrRuleToDestrRule (Rule (IntrInfo (ConstrRule name)) ps' cs _ _) i s c
+    -- we remove the actions and new variables as destructors do not have actions or new variables
+    = map toRule $ permutations ps'
+    where
+        toRule :: [LNFact] -> RuleAC
+        toRule []     = error "Bug in constrRuleToDestrRule. Please report."
+        toRule (p:ps) = Rule (IntrInfo (DestrRule name i s c)) ((convertKUtoKD p):ps) (map convertKUtoKD cs) [] []
+constrRuleToDestrRule _ _ _ _ = error "Not a destructor rule."
+
+-- | Converts between destructor and constructor rules.
+destrRuleToConstrRule :: FunSym -> Int -> RuleAC -> [RuleAC]
+destrRuleToConstrRule f l (Rule (IntrInfo (DestrRule name _ _ _)) ps cs _ _)
+    = map (\x -> toRule x (conclusions cs)) (permutations (map convertKDtoKU ps ++ kuFacts))
+    where
+        -- we add the conclusion as an action as constructors have this action
+        toRule :: [LNFact] -> [LNFact] -> RuleAC
+        toRule ps' cs' = Rule (IntrInfo (ConstrRule name)) ps' cs' cs' []
+
+        conclusions [] = []
+        -- KD and KU facts only have one term
+        conclusions ((Fact KDFact ann (m:ms)):cs') = (Fact KUFact ann ((addTerms m):ms)):(conclusions cs')
+        conclusions                    (c:cs') =                               c:(conclusions cs')
+
+        addTerms (FAPP f' t) | f'==f = fApp f (t ++ newvars)
+        addTerms  t                  = fApp f (t:newvars)
+
+        kuFacts = map kuFact newvars
+
+        newvars = map (var "z") [1..(toInteger $ l-(length ps))]
+destrRuleToConstrRule _ _ _ = error "Not a constructor rule."
+
+-- | Creates variants of a destructor rule, where KD and KU facts are permuted.
+destrRuleToDestrRule :: RuleAC -> [RuleAC]
+destrRuleToDestrRule (Rule (IntrInfo (DestrRule name i s c)) ps' cs as nv)
+    = map toRule $ permutations (map convertKDtoKU ps')
+    where
+        toRule []     = error "Bug in destrRuleToDestrRule. Please report."
+        toRule (p:ps) = Rule (IntrInfo (DestrRule name i s c)) ((convertKUtoKD p):ps) cs as nv
+destrRuleToDestrRule _ = error "Not a destructor rule."
+
 
 -- Instances
 ------------
 
-instance Apply IntrRuleACInfo where
+instance Apply s IntrRuleACInfo where
     apply _ = id
 
 instance HasFrees IntrRuleACInfo where
@@ -404,7 +569,7 @@ instance HasFrees IntrRuleACInfo where
 -- | A rule modulo E is always a protocol rule. Intruder rules are specified
 -- abstractly by their operations generating them and are only available once
 -- their variants are built.
-type ProtoRuleE  = Rule ProtoRuleName
+type ProtoRuleE  = Rule ProtoRuleEInfo
 
 -- | A protocol rule modulo AC.
 type ProtoRuleAC = Rule ProtoRuleACInfo
@@ -422,16 +587,16 @@ type RuleACInst  = Rule (RuleInfo ProtoRuleACInstInfo IntrRuleACInfo)
 
 -- | Types that have an associated name.
 class HasRuleName t where
-  ruleName :: t -> RuleInfo ProtoRuleName IntrRuleACInfo
+  ruleName       :: t -> RuleInfo ProtoRuleName IntrRuleACInfo
 
 instance HasRuleName ProtoRuleE where
-  ruleName = ProtoInfo . L.get rInfo
+  ruleName       = ProtoInfo . L.get (preName . rInfo)
 
 instance HasRuleName RuleAC where
   ruleName = ruleInfo (ProtoInfo . L.get pracName) IntrInfo . L.get rInfo
 
 instance HasRuleName ProtoRuleAC where
-  ruleName = ProtoInfo . L.get (pracName . rInfo)
+  ruleName  = ProtoInfo . L.get (pracName . rInfo)
 
 instance HasRuleName IntrRuleAC where
   ruleName = IntrInfo . L.get rInfo
@@ -439,6 +604,25 @@ instance HasRuleName IntrRuleAC where
 instance HasRuleName RuleACInst where
   ruleName = ruleInfo (ProtoInfo . L.get praciName) IntrInfo . L.get rInfo
 
+class HasRuleAttributes t where
+  ruleAttributes :: t -> [RuleAttribute]
+
+instance HasRuleAttributes ProtoRuleE where
+  ruleAttributes = L.get (preAttributes . rInfo)
+
+instance HasRuleAttributes RuleAC where
+  ruleAttributes (Rule (ProtoInfo ri) _ _ _ _) = L.get pracAttributes ri
+  ruleAttributes _                             = []
+
+instance HasRuleAttributes ProtoRuleAC where
+  ruleAttributes = L.get (pracAttributes . rInfo)
+
+instance HasRuleAttributes IntrRuleAC where
+  ruleAttributes _ = []
+
+instance HasRuleAttributes RuleACInst where
+  ruleAttributes (Rule (ProtoInfo ri) _ _ _ _) = L.get praciAttributes ri
+  ruleAttributes _                             = []
 
 -- Queries
 ----------
@@ -454,7 +638,7 @@ isDestrRule ru = case ruleName ru of
 isIEqualityRule :: HasRuleName r => r -> Bool
 isIEqualityRule ru = case ruleName ru of
   IntrInfo IEqualityRule -> True
-  _                     -> False
+  _                      -> False
 
 -- | True iff the rule is a construction rule.
 isConstrRule :: HasRuleName r => r -> Bool
@@ -470,7 +654,7 @@ isPubConstrRule :: HasRuleName r => r -> Bool
 isPubConstrRule ru = case ruleName ru of
   IntrInfo PubConstrRule   -> True
   _                        -> False
-  
+
 -- | True iff the rule is the special fresh rule.
 isFreshRule :: HasRuleName r => r -> Bool
 isFreshRule = (ProtoInfo FreshRule ==) . ruleName
@@ -503,17 +687,18 @@ isSubtermRule ru = case ruleName ru of
 
 -- | True if the messages in premises and conclusions are in normal form
 nfRule :: Rule i -> WithMaude Bool
-nfRule (Rule _ ps cs as) = reader $ \hnd ->
-    all (nfFactList hnd) [ps, cs, as]
+nfRule (Rule _ ps cs as nvs) = reader $ \hnd ->
+    all (nfFactList hnd) [ps, cs, as, map termFact nvs]
   where
     nfFactList hnd xs =
         getAll $ foldMap (foldMap (All . (\t -> nf' t `runReader` hnd))) xs
 
 -- | Normalize all terms in premises, actions and conclusions
 normRule :: Rule i -> WithMaude (Rule i)
-normRule (Rule rn ps cs as) = reader $ \hnd -> (Rule rn (normFacts ps hnd) (normFacts cs hnd) (normFacts as hnd))
+normRule (Rule rn ps cs as nvs) = reader $ \hnd -> (Rule rn (normFacts ps hnd) (normFacts cs hnd) (normFacts as hnd) (normTerms nvs hnd))
   where
     normFacts fs hnd' = map (\f -> runReader (normFact f) hnd') fs
+    normTerms fs hnd' = map (\f -> runReader (norm' f) hnd') fs
 
 -- | True iff the rule is an intruder rule
 isIntruderRule :: HasRuleName r => r -> Bool
@@ -524,12 +709,12 @@ isIntruderRule ru =
 isProtocolRule :: HasRuleName r => r -> Bool
 isProtocolRule ru =
     case ruleName ru of IntrInfo _ -> False; ProtoInfo _ -> True
-    
+
 -- | True if the protocol rule has only the trivial variant.
 isTrivialProtoVariantAC :: ProtoRuleAC -> ProtoRuleE -> Bool
-isTrivialProtoVariantAC (Rule info ps as cs) (Rule _ ps' as' cs') =
+isTrivialProtoVariantAC (Rule info ps as cs nvs) (Rule _ ps' as' cs' nvs') =
     L.get pracVariants info == Disj [emptySubstVFresh]
-    && ps == ps' && as == as' && cs == cs'
+    && ps == ps' && as == as' && cs == cs' && nvs == nvs'
 
 -- | Returns a rule's name
 getRuleName :: HasRuleName (Rule i) => Rule i -> String
@@ -571,97 +756,123 @@ getRemainingRuleApplications ru = case ruleName ru of
 
 -- | Sets the remaining rule applications within the deconstruction chain if possible
 setRemainingRuleApplications :: RuleACInst -> Int -> RuleACInst
-setRemainingRuleApplications (Rule (IntrInfo (DestrRule name _ subterm constant)) prems concs acts) i
-    = Rule (IntrInfo (DestrRule name i subterm constant)) prems concs acts
+setRemainingRuleApplications (Rule (IntrInfo (DestrRule name _ subterm constant)) prems concs acts nvs) i
+    = Rule (IntrInfo (DestrRule name i subterm constant)) prems concs acts nvs
 setRemainingRuleApplications rule _
     = rule
 
 -- | Converts a protocol rule to its "left" variant
-getLeftRule :: ProtoRuleE ->  ProtoRuleE
-getLeftRule (Rule ri ps cs as) =
-   (Rule ri (map getLeftFact ps) (map getLeftFact cs) (map getLeftFact as))
+getLeftRule :: Rule i ->  Rule i
+getLeftRule (Rule ri ps cs as nvs) =
+   Rule ri (map getLeftFact ps) (map getLeftFact cs) (map getLeftFact as) (map getLeftTerm nvs)
 
--- | Converts a protocol rule to its "left" variant
-getRightRule :: ProtoRuleE ->  ProtoRuleE
-getRightRule (Rule ri ps cs as) =
-   (Rule ri (map getRightFact ps) (map getRightFact cs) (map getRightFact as))
-   
--- | Returns a list of all new variables introduced in this rule instance and the facts they occur in
-getNewVariables :: Rule a -> [(LNFact, LVar)]
-getNewVariables ru = map (\(x, _, z) -> (x, z)) $ getNewVariablesWithIndex ru
+-- | Converts a protocol rule to its "right" variant
+getRightRule :: Rule i ->  Rule i
+getRightRule (Rule ri ps cs as nvs) =
+   Rule ri (map getRightFact ps) (map getRightFact cs) (map getRightFact as) (map getRightTerm nvs)
+
+-- | Returns a list of all new variables that need to be fixed for mirroring
+getNewVariables :: Bool -> RuleACInst -> [LVar]
+getNewVariables showPubVars (Rule _ _ _ _ nvs) = case showPubVars of
+    True  -> newvars
+    False -> filter (\v -> not $ lvarSort v == LSortPub) newvars
+  where
+    newvars = toVariables nvs
+
+    toVariables []     = []
+    toVariables (x:xs) = case getVar x of
+                              Just v  -> v:(toVariables xs)
+                              -- if the variable is already fixed, no need to fix it again!
+                              Nothing -> toVariables xs
 
 -- | Returns whether a given rule has new variables
-containsNewVars :: Rule i -> Bool
-containsNewVars ru = not $ S.null newvars
-  where 
-    newvars = S.difference concvars premvars
-    premvars = S.fromList $ concat $ map (getFactVariables . snd) $ enumPrems ru
-    concvars = S.fromList $ concat $ map (getFactVariables . snd) $ enumConcs ru
+containsNewVars :: RuleACInst -> Bool
+containsNewVars (Rule _ _ _ _ nvs) = nvs == []
 
--- | Returns a list of all new variables introduced in this rule instance and the facts and indices they occur in
-getNewVariablesWithIndex :: Rule a -> [(LNFact, ConcIdx, LVar)]
-getNewVariablesWithIndex ru = getFacts $ S.toList newvars
-  where 
-    newvars = S.difference concvars premvars
-    premvars = S.fromList $ concat $ map (getFactVariables . snd) $ enumPrems ru
-    concvars = S.fromList $ concat $ map (getFactVariables . snd) $ enumConcs ru
-    
-    getFacts []     = []
-    getFacts (x:xs) = (map (\(idx, f) -> (f, idx, x)) $ filter (\(_, f) -> x `elem` getFactVariables f) $ enumConcs ru) ++ (getFacts xs)
+-- | Given a fresh rule instance and the rule instance to mirror, returns a substitution
+--   determining how all new variables need to be instantiated if possible.
+--   First parameter: original instance to mirror
+--   Second parameter: fresh instance
+getSubstitutionsFixingNewVars :: RuleACInst -> RuleACInst -> Maybe LNSubst
+getSubstitutionsFixingNewVars (Rule (ProtoInfo (ProtoRuleACInstInfo _ _ _)) _ _ _ instancesO)
+   (Rule (ProtoInfo (ProtoRuleACInstInfo _ _ _)) _ _ _ instancesF)
+      | all (\(x, y) -> isPubVar x || x == y) $ zip instancesF instancesO
+          = Just $ Subst $ M.fromList $ substList instancesF instancesO
+      -- otherwise there is no substitution
+      | otherwise
+          = Nothing
+    where
+       substList []     []     = []
+       substList (f:fs) (o:os) = case getVar f of
+                   Nothing -> (substList fs os)
+                   Just v  -> (v, o):(substList fs os)
+       substList _      _      = error "getSubstitutionsFixingNewVars: different number of new variables"
+getSubstitutionsFixingNewVars _ _
+          = error "getSubstitutionsFixingNewVars: not called on a protocol rule" -- FIXME: Nothing?
 
-    
--- | Given a rule instance, returns a substitution determining how all new variables have been instantiated.
-getSubstitutionsFixingNewVars :: RuleACInst -> RuleAC -> LNSubst
-getSubstitutionsFixingNewVars rule orig = Subst $ M.fromList $ concat $ map getSubst newvars
+-- | returns true if the first Rule has the same name, premise, conclusion and
+-- action facts, ignoring added action facts and other rule information
+-- TODO: Ignore renaming?
+equalUpToAddedActions :: (HasRuleName (Rule i), HasRuleName (Rule i2)) => (Rule i) -> (Rule i2) -> Bool
+equalUpToAddedActions ruAC@(Rule _ ps cs as _) ruE@(Rule _ ps' cs' as' _) =
+  ruleName ruE == ruleName ruAC && ps == ps' && cs == cs' && compareActions as as'
   where
-    newvars = getNewVariablesWithIndex orig
-    
-    getSubst :: (LNFact, ConcIdx, LVar) -> [(LVar, LNTerm)]
-    getSubst (fa, cidx, var) = map (\x -> (var, x)) (getMatchingTerm (fa, cidx, var))
-    
-    getMatchingTerm :: (LNFact, ConcIdx, LVar) -> [LNTerm]
-    getMatchingTerm ((Fact fi ts), cidx, var') = rec var' ts matchingTs 
-      where
-        matchingTs = case matchingConc of
-                          Fact fi' ts' -> if fi == fi' then ts' else (error $ "getMatchingTerm: Matching conclusion with different fact: " ++ show (Fact fi ts) ++ " " ++ show cidx ++ " " ++ show var')
-        matchingConc = fromMaybe (error $ "getMatchingTerm: No matching conclusion: " ++ show (Fact fi ts) ++ " " ++ show cidx ++ " " ++ show var') (lookupConc cidx rule)
-        
-        rec :: LVar -> [LNTerm] -> [LNTerm] -> [LNTerm]
-        rec _   []     []       = []
-        rec var (x:xs) (mt:mts) = case (viewTerm x, viewTerm mt) of
-                                       (Lit (Var a), _)            | a == var -> mt:(rec var xs mts)
-                                       (FApp f ts' , FApp f' mts') | f == f'  -> (rec var ts' mts')++(rec var xs mts)
-                                       (FApp f _   , FApp f' _   ) | f /= f'  -> error "getMatchingTerm: Non-matching function terms!"
-                                       (_          , _           )            -> (rec var xs mts)
-        rec _   _      _        = error "getMatchingTerm: Different number of terms!"
-        
+    compareActions _      []       = True
+    compareActions []     _        = False
+    compareActions (a:ass) (a':ass') = if a == a'
+      then compareActions ass ass'
+      else compareActions ass (a':ass')
+
+-- | returns true if the first Rule has the same name, premise, conclusion and
+-- action facts, ignoring terms
+equalUpToTerms :: (HasRuleName (Rule i), HasRuleName (Rule i2)) => (Rule i) -> (Rule i2) -> Bool
+equalUpToTerms ruAC@(Rule _ ps cs as _) ruE@(Rule _ ps' cs' as' _) =
+  ruleName ruE == ruleName ruAC
+    && length ps == length ps' && length cs == length cs' && length as == length as'
+    && foldl sameFacts True (zip ps ps') && foldl sameFacts True (zip cs cs')
+    && foldl sameFacts True (zip as as')
+  where
+    sameFacts b (f1, f2) = b && sameFact f1 f2
+    sameFact (Fact tag _ _) (Fact tag' _ _) = tag == tag'
 
 -- Construction
 ---------------
 
 -- | Returns a multiplication rule instance of the given size.
 multRuleInstance :: Int -> RuleAC
-multRuleInstance n = (Rule (IntrInfo (ConstrRule $ BC.pack "mult")) (map xifact [1..n]) [prod] [prod])
+multRuleInstance n = (Rule (IntrInfo (ConstrRule $ BC.pack "_mult")) (map xifact [1..n]) [prod] [prod] [])
   where
-    prod = Fact KUFact [(FAPP (AC Mult) (map xi [1..n]))]
-    
+    prod = kuFact (FAPP (AC Mult) (map xi [1..n]))
+
     xi :: Int -> LNTerm
     xi k = (LIT $ Var $ LVar "x" LSortMsg (toInteger k))
-    
+
     xifact :: Int -> LNFact
-    xifact k = Fact KUFact [(xi k)]
+    xifact k = kuFact (xi k)
 
 -- | Returns a union rule instance of the given size.
 unionRuleInstance :: Int -> RuleAC
-unionRuleInstance n = (Rule (IntrInfo (ConstrRule $ BC.pack "union")) (map xifact [1..n]) [prod] [prod])
+unionRuleInstance n = (Rule (IntrInfo (ConstrRule $ BC.pack "_union")) (map xifact [1..n]) [prod] [prod] [])
   where
-    prod = Fact KUFact [(FAPP (AC Union) (map xi [1..n]))]
-    
+    prod = kuFact (FAPP (AC Union) (map xi [1..n]))
+
     xi :: Int -> LNTerm
     xi k = (LIT $ Var $ LVar "x" LSortMsg (toInteger k))
-    
+
     xifact :: Int -> LNFact
-    xifact k = Fact KUFact [(xi k)]
+    xifact k = kuFact (xi k)
+
+-- | Returns a xor rule instance of the given size.
+xorRuleInstance :: Int -> RuleAC
+xorRuleInstance n = (Rule (IntrInfo (ConstrRule $ BC.pack "_xor")) (map xifact [1..n]) [prod] [prod] [])
+  where
+    prod = Fact KUFact S.empty [(FAPP (AC Xor) (map xi [1..n]))]
+
+    xi :: Int -> LNTerm
+    xi k = (LIT $ Var $ LVar "x" LSortMsg (toInteger k))
+
+    xifact :: Int -> LNFact
+    xifact k = Fact KUFact S.empty [(xi k)]
 
 type RuleACConstrs = Disj LNSubstVFresh
 
@@ -673,32 +884,36 @@ someRuleACInst :: MonadFresh m
 someRuleACInst =
     fmap extractInsts . rename
   where
-    extractInsts (Rule (ProtoInfo i) ps cs as) =
-      ( Rule (ProtoInfo i') ps cs as
+    extractInsts (Rule (ProtoInfo i) ps cs as nvs) =
+      ( Rule (ProtoInfo i') ps cs as nvs
       , Just (L.get pracVariants i)
       )
       where
-        i' = ProtoRuleACInstInfo (L.get pracName i) (L.get pracLoopBreakers i)
-    extractInsts (Rule (IntrInfo i) ps cs as) =
-      ( Rule (IntrInfo i) ps cs as, Nothing )
+        i' = ProtoRuleACInstInfo (L.get pracName i)
+                                 (L.get pracAttributes i)
+                                 (L.get pracLoopBreakers i)
+    extractInsts (Rule (IntrInfo i) ps cs as nvs) =
+      ( Rule (IntrInfo i) ps cs as nvs, Nothing )
 
 -- | Compute /some/ rule instance of a rule modulo AC. If the rule is a
 -- protocol rule, then the given source and variants also need to be handled.
-someRuleACInstAvoiding :: HasFrees t 
+someRuleACInstAvoiding :: HasFrees t
                => RuleAC
                -> t
                -> (RuleACInst, Maybe RuleACConstrs)
 someRuleACInstAvoiding r s =
     renameAvoiding (extractInsts r) s
   where
-    extractInsts (Rule (ProtoInfo i) ps cs as) =
-      ( Rule (ProtoInfo i') ps cs as
+    extractInsts (Rule (ProtoInfo i) ps cs as nvs) =
+      ( Rule (ProtoInfo i') ps cs as nvs
       , Just (L.get pracVariants i)
       )
       where
-        i' = ProtoRuleACInstInfo (L.get pracName i) (L.get pracLoopBreakers i)
-    extractInsts (Rule (IntrInfo i) ps cs as) =
-      ( Rule (IntrInfo i) ps cs as, Nothing )
+        i' = ProtoRuleACInstInfo (L.get pracName i)
+                                 (L.get pracAttributes i)
+                                 (L.get pracLoopBreakers i)
+    extractInsts (Rule (IntrInfo i) ps cs as nvs) =
+      ( Rule (IntrInfo i) ps cs as nvs, Nothing )
 
 -- | Compute /some/ rule instance of a rule modulo AC. If the rule is a
 -- protocol rule, then the given source and variants also need to be handled.
@@ -709,19 +924,20 @@ someRuleACInstFixing :: MonadFresh m
 someRuleACInstFixing r subst =
     renameIgnoring (varsRange subst) (extractInsts r)
   where
-    extractInsts (Rule (ProtoInfo i) ps cs as) =
-      ( apply subst (Rule (ProtoInfo i') ps cs as)
+    extractInsts (Rule (ProtoInfo i) ps cs as nvs) =
+      ( apply subst (Rule (ProtoInfo i') ps cs as nvs)
       , Just (L.get pracVariants i)
       )
       where
-        i' = ProtoRuleACInstInfo (L.get pracName i) (L.get pracLoopBreakers i)
-    extractInsts (Rule (IntrInfo i) ps cs as) =
-      ( apply subst (Rule (IntrInfo i) ps cs as), Nothing )
+        i' = ProtoRuleACInstInfo (L.get pracName i)
+                                 (L.get pracAttributes i)
+                                 (L.get pracLoopBreakers i)
+    extractInsts (Rule (IntrInfo i) ps cs as nvs) =
+      ( apply subst (Rule (IntrInfo i) ps cs as nvs), Nothing )
 
-      
 -- | Compute /some/ rule instance of a rule modulo AC. If the rule is a
 -- protocol rule, then the given source and variants also need to be handled.
-someRuleACInstAvoidingFixing :: HasFrees t 
+someRuleACInstAvoidingFixing :: HasFrees t
                => RuleAC
                -> t
                -> LNSubst
@@ -729,25 +945,40 @@ someRuleACInstAvoidingFixing :: HasFrees t
 someRuleACInstAvoidingFixing r s subst =
     renameAvoidingIgnoring (extractInsts r) s (varsRange subst)
   where
-    extractInsts (Rule (ProtoInfo i) ps cs as) =
-      ( apply subst (Rule (ProtoInfo i') ps cs as)
+    extractInsts (Rule (ProtoInfo i) ps cs as nvs) =
+      ( apply subst (Rule (ProtoInfo i') ps cs as nvs)
       , Just (L.get pracVariants i)
       )
       where
-        i' = ProtoRuleACInstInfo (L.get pracName i) (L.get pracLoopBreakers i)
-    extractInsts (Rule (IntrInfo i) ps cs as) =
-      ( apply subst (Rule (IntrInfo i) ps cs as), Nothing )
+        i' = ProtoRuleACInstInfo (L.get pracName i)
+                                 (L.get pracAttributes i)
+                                 (L.get pracLoopBreakers i)
+    extractInsts (Rule (IntrInfo i) ps cs as nvs) =
+      ( apply subst (Rule (IntrInfo i) ps cs as nvs), Nothing )
 
-      
 -- | Add the diff label to a rule
 addDiffLabel :: Rule a -> String -> Rule a
-addDiffLabel (Rule info prems concs acts) name = Rule info prems concs (acts ++ [Fact {factTag = ProtoFact Linear name 0, factTerms = []}])
+addDiffLabel (Rule info prems concs acts nvs) name =
+  Rule info prems concs
+    (acts ++ [Fact {factTag = ProtoFact Linear name 0,
+                    factAnnotations = S.empty, factTerms = []}]) nvs
 
 -- | Remove the diff label from a rule
 removeDiffLabel :: Rule a -> String -> Rule a
-removeDiffLabel (Rule info prems concs acts) name = Rule info prems concs (filter isNotDiffAnnotation acts)
+removeDiffLabel (Rule info prems concs acts nvs) name =
+    Rule info prems concs (filter isNotDiffAnnotation acts) nvs
   where
-    isNotDiffAnnotation fa = (fa /= Fact {factTag = ProtoFact Linear name 0, factTerms = []})
+    isNotDiffAnnotation fa =
+      fa /= Fact {factTag = ProtoFact Linear name 0,
+                  factAnnotations = S.empty, factTerms = []}
+
+-- | Add an action label to a rule
+addAction :: Rule a -> LNFact -> Rule a
+addAction (Rule info prems concs acts nvs) act =
+  if act `elem` acts
+    then Rule info prems concs acts nvs
+    else Rule info prems concs (act:acts) nvs
+
 
 -- Unification
 --------------
@@ -767,11 +998,44 @@ unifyRuleACInstEqs eqs
         zipWith Equal (L.get rPrems ru1) (L.get rPrems ru2) ++
         zipWith Equal (L.get rConcs ru1) (L.get rConcs ru2)
 
--- | Are these two rule instances unifiable.
+-- | Are these two rule instances unifiable?
 unifiableRuleACInsts :: RuleACInst -> RuleACInst -> WithMaude Bool
 unifiableRuleACInsts ru1 ru2 =
     (not . null) <$> unifyRuleACInstEqs [Equal ru1 ru2]
 
+-- | Are these two rule instances equal up to renaming of variables?
+equalRuleUpToRenaming :: (Show a, Eq a, HasFrees a) => Rule a -> Rule a -> WithMaude Bool
+equalRuleUpToRenaming r1@(Rule rn1 pr1 co1 ac1 nvs1) r2@(Rule rn2 pr2 co2 ac2 nvs2) = reader $ \hnd ->
+  case eqs of
+       Nothing   -> False
+       Just eqs' -> (rn1 == rn2) && (any isRenamingPerRule $ unifs eqs' hnd)
+    where
+       isRenamingPerRule subst = isRenaming (restrictVFresh (vars r1) subst) && isRenaming (restrictVFresh (vars r2) subst)
+       vars ru = map fst $ varOccurences ru
+       unifs eq hnd = unifyLNTerm eq `runReader` hnd
+       eqs = foldl matchFacts (Just $ zipWith Equal nvs1 nvs2) $ zip (pr1++co1++ac1) (pr2++co2++ac2)
+       matchFacts Nothing  _                                    = Nothing
+       matchFacts (Just l) (Fact f1 _ t1, Fact f2 _ t2) | f1 == f2  = Just ((zipWith Equal t1 t2)++l)
+                                                    | otherwise = Nothing
+
+-- | Are these two rule instances equal up to added annotations in @ac2@?
+equalRuleUpToAnnotations :: (Eq a) => Rule a -> Rule a -> Bool
+equalRuleUpToAnnotations (Rule rn1 pr1 co1 ac1 nvs1) (Rule rn2 pr2 co2 ac2 nvs2) =
+  rn1 == rn2 && pr1 == pr2 && co1 == co2 && nvs1 == nvs2 &&
+  S.isSubsetOf (S.fromList ac1) (S.fromList ac2)
+
+-- | Are these two rule instances equal up to an added diff annotation in @ac2@?
+equalRuleUpToDiffAnnotation :: (HasRuleName (Rule a), Eq a) => Rule a -> Rule a -> Bool
+equalRuleUpToDiffAnnotation ru1@(Rule rn1 pr1 co1 ac1 nvs1) (Rule rn2 pr2 co2 ac2 nvs2) =
+  rn1 == rn2 && pr1 == pr2 && co1 == co2 && nvs1 == nvs2 &&
+  ac1 == filter isNotDiffAnnotation ac2
+  where
+    isNotDiffAnnotation fa = (fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru1) 0, factAnnotations = S.empty, factTerms = []})
+
+-- | Are these two rule instances equal up to an added diff annotation in @ac2@ or @ac1@?
+equalRuleUpToDiffAnnotationSym :: (HasRuleName (Rule a), Eq a) => Rule a -> Rule a -> Bool
+equalRuleUpToDiffAnnotationSym ru1 ru2 = equalRuleUpToDiffAnnotation ru1 ru2
+                                      || equalRuleUpToDiffAnnotation ru2 ru1
 
 ------------------------------------------------------------------------------
 -- Fact analysis
@@ -847,6 +1111,14 @@ prettyProtoRuleName rn = text $ case rn of
 prettyRuleName :: (HighlightDocument d, HasRuleName (Rule i)) => Rule i -> d
 prettyRuleName = ruleInfo prettyProtoRuleName prettyIntrRuleACInfo . ruleName
 
+prettyRuleAttribute :: (HighlightDocument d) => RuleAttribute -> d
+prettyRuleAttribute attr = case attr of
+    RuleColor c -> text "color=" <> text (rgbToHex c)
+    Process   p -> text "process=" <> text ("\"" ++ prettySapicTopLevel' f p ++ "\"")
+        where f l a r rest _ = render $ prettyRuleRestr (g l) (g a) (g r) (h rest)
+              g = map toLNFact
+              h = map toLFormula
+
 -- | Pretty print the rule name such that it can be used as a case name
 showRuleCaseName :: HasRuleName (Rule i) => Rule i -> String
 showRuleCaseName =
@@ -864,25 +1136,56 @@ prettyIntrRuleACInfo rn = text $ case rn of
     DestrRule name _ _ _ -> prefixIfReserved ('d' : BC.unpack name)
 --     DestrRule name i -> prefixIfReserved ('d' : BC.unpack name ++ "_" ++ show i)
 
-prettyNamedRule :: (HighlightDocument d, HasRuleName (Rule i))
+
+-- TODO may be removed
+-- prettyRestr :: HighlightDocument d => F.SyntacticLNFormula -> d
+-- prettyRestr fact =  operator_ "_restrict(" <> text (filter (/= '#') $ render $ F.prettySyntacticLNFormula fact) <> operator_ ")"
+
+-- | pretty-print rules with restrictions
+prettyRuleRestrGen :: (HighlightDocument d) => (f -> d) -> (r -> d) -> [f] -> [f] -> [f] -> [r] -> d
+prettyRuleRestrGen ppFact ppRestr prems acts concls restr=
+    sep [ nest 1 $ ppFactsList prems
+                , if null acts && null restr
+                    then operator_ "-->"
+                    else fsep [operator_ "--["
+                             , ppList (map ppFact acts
+                                    ++ map ppRestr' restr)
+                             , operator_ "]->"]
+                , nest 1 $ ppFactsList concls]
+-- Debug:
+--     (keyword_ "new variables: ") <> (ppList prettyLNTerm $ L.get rNewVars ru)
+  where
+    ppList           = fsep . punctuate comma
+    ppFacts'         = ppList . map ppFact
+    ppFactsList list = fsep [operator_ "[", ppFacts' list, operator_ "]"]
+    ppRestr' fact    = operator_ "_restrict(" <> ppRestr fact <> operator_ ")"
+
+-- | pretty-print rules with restrictions
+prettyRuleRestr :: HighlightDocument d => [LNFact] -> [LNFact] -> [LNFact] -> [F.SyntacticLNFormula] -> d
+prettyRuleRestr = prettyRuleRestrGen prettyLNFact F.prettySyntacticLNFormula
+
+-- | pretty-print rules without restrictions
+prettyRule :: HighlightDocument d => [LNFact] -> [LNFact] -> [LNFact] -> d
+prettyRule prems acts concls = prettyRuleRestr prems acts concls []
+
+
+prettyNamedRule :: (HighlightDocument d, HasRuleName (Rule i), HasRuleAttributes (Rule i))
                 => d           -- ^ Prefix.
                 -> (i -> d)    -- ^ Rule info pretty printing.
                 -> Rule i -> d
 prettyNamedRule prefix ppInfo ru =
-    prefix <-> prettyRuleName ru <> colon $-$
-    nest 2 (sep [ nest 1 $ ppFactsList rPrems
-                , if null acts
-                    then operator_ "-->"
-                    else fsep [operator_ "--[", ppFacts' acts, operator_ "]->"]
-                , nest 1 $ ppFactsList rConcs]) $-$
-    nest 2 (ppInfo $ L.get rInfo ru)
-  where
+    prefix <-> prettyRuleName ru <> ppAttributes <> colon $-$
+    nest 2
+    (prettyRule (facts rPrems) acts (facts rConcs))  $-$
+    nest 2 (ppInfo $ L.get rInfo ru) --- $-$
+    where
     acts             = filter isNotDiffAnnotation (L.get rActs ru)
-    ppList pp        = fsep . punctuate comma . map pp
-    ppFacts' list    = ppList prettyLNFact list
-    ppFacts proj     = ppList prettyLNFact $ L.get proj ru
-    ppFactsList proj = fsep [operator_ "[", ppFacts proj, operator_ "]"]
-    isNotDiffAnnotation fa = (fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factTerms = []})
+    isNotDiffAnnotation fa = (fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []})
+    facts proj     = L.get proj ru
+    ppAttributes = case ruleAttributes ru of
+        []    -> text ""
+        attrs -> hcat [text "[", ppList $ map prettyRuleAttribute attrs, text "]"]
+    ppList           = fsep . punctuate comma
 
 prettyProtoRuleACInfo :: HighlightDocument d => ProtoRuleACInfo -> d
 prettyProtoRuleACInfo i =
@@ -892,6 +1195,9 @@ prettyProtoRuleACInfo i =
     ppVariants (Disj [subst]) | subst == emptySubstVFresh = emptyDoc
     ppVariants substs = kwVariantsModulo "AC" $-$ prettyDisjLNSubstsVFresh substs
 
+prettyProtoRuleACInstInfo :: HighlightDocument d => ProtoRuleACInstInfo -> d
+prettyProtoRuleACInstInfo i = prettyInstLoopBreakers i
+
 prettyLoopBreakers :: HighlightDocument d => ProtoRuleACInfo -> d
 prettyLoopBreakers i = case breakers of
     []  -> emptyDoc
@@ -899,6 +1205,14 @@ prettyLoopBreakers i = case breakers of
     _   -> lineComment_ $ "loop breakers: " ++ show breakers
   where
     breakers = getPremIdx <$> L.get pracLoopBreakers i
+
+prettyInstLoopBreakers :: HighlightDocument d => ProtoRuleACInstInfo -> d
+prettyInstLoopBreakers i = case breakers of
+    []  -> emptyDoc
+    [_] -> lineComment_ $ "loop breaker: "  ++ show breakers
+    _   -> lineComment_ $ "loop breakers: " ++ show breakers
+  where
+    breakers = getPremIdx <$> L.get praciLoopBreakers i
 
 prettyProtoRuleE :: HighlightDocument d => ProtoRuleE -> d
 prettyProtoRuleE = prettyNamedRule (kwRuleModulo "E") (const emptyDoc)
@@ -908,6 +1222,10 @@ prettyRuleAC =
     prettyNamedRule (kwRuleModulo "AC")
         (ruleInfo prettyProtoRuleACInfo (const emptyDoc))
 
+prettyProtoRuleACasE :: HighlightDocument d => ProtoRuleAC -> d
+prettyProtoRuleACasE =
+    prettyNamedRule (kwRuleModulo "E") (const emptyDoc)
+
 prettyIntrRuleAC :: HighlightDocument d => IntrRuleAC -> d
 prettyIntrRuleAC = prettyNamedRule (kwRuleModulo "AC") (const emptyDoc)
 
@@ -916,3 +1234,15 @@ prettyProtoRuleAC = prettyNamedRule (kwRuleModulo "AC") prettyProtoRuleACInfo
 
 prettyRuleACInst :: HighlightDocument d => RuleACInst -> d
 prettyRuleACInst = prettyNamedRule (kwInstanceModulo "AC") (const emptyDoc)
+
+-- | Pretty-print a non-empty bunch of intruder rules.
+prettyIntruderVariants :: HighlightDocument d => [IntrRuleAC] -> d
+prettyIntruderVariants vs = vcat . intersperse (text "") $ map prettyIntrRuleAC vs
+
+{-
+-- | Pretty-print the intruder variants section.
+prettyIntrVariantsSection :: HighlightDocument d => [IntrRuleAC] -> d
+prettyIntrVariantsSection rules =
+    prettyFormalComment "section" " Finite Variants of the Intruder Rules " $--$
+    nest 1 (prettyIntruderVariants rules)
+-}

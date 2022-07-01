@@ -3,8 +3,12 @@ theory Scott begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman, bilinear-pairing
-functions: fst/1, hp/1, kdf/1, pair/2, snd/1
+functions: fst/1[destructor], hp/1, kdf/1, pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
 
 section{* Scott: MTI-C0 like identity based key exchange protocol *}
 
@@ -55,7 +59,8 @@ rule (modulo E) Init_2:
    [ Init( ~ex, $A, $B, X ), In( Y ) ]
   --[
   Accept( ~ex, $A, $B, kdf(<Y^~ex, $A, $B, X, Y>) ),
-  Sid( ~ex, <'Init', $A, $B, X, Y> ), Match( ~ex, <'Resp', $B, $A, X, Y> )
+  Sid( ~ex, <'Init', $A, $B, X, Y> ), Match( ~ex, <'Resp', $B, $A, X, Y> ),
+  NotNeutral( Y )
   ]->
    [ !Sessk( ~ex, kdf(<Y^~ex, $A, $B, X, Y>) ) ]
 
@@ -64,7 +69,8 @@ rule (modulo E) Init_2:
      [ Init( ~ex, $A, $B, X ), In( Y ) ]
     --[
     Accept( ~ex, $A, $B, kdf(<z, $A, $B, X, Y>) ),
-    Sid( ~ex, <'Init', $A, $B, X, Y> ), Match( ~ex, <'Resp', $B, $A, X, Y> )
+    Sid( ~ex, <'Init', $A, $B, X, Y> ), Match( ~ex, <'Resp', $B, $A, X, Y> ),
+    NotNeutral( Y )
     ]->
      [ !Sessk( ~ex, kdf(<z, $A, $B, X, Y>) ) ]
     variants (modulo AC)
@@ -80,17 +86,17 @@ rule (modulo E) Init_2:
        Y     = x.25^x.26
        z     = x.25^(~ex.15*x.26)
     
-    4. ~ex   = ~ex.16
-       Y     = x.27^inv((~ex.16*x.28))
-       z     = x.27^inv(x.28)
+    4. ~ex   = ~ex.17
+       Y     = x.29^inv((~ex.17*x.30))
+       z     = x.29^inv(x.30)
     
-    5. ~ex   = ~ex.16
-       Y     = x.27^(x.28*inv(~ex.16))
-       z     = x.27^x.28
+    5. ~ex   = ~ex.17
+       Y     = x.29^(x.30*inv(~ex.17))
+       z     = x.29^x.30
     
-    6. ~ex   = ~ex.17
-       Y     = x.28^(x.30*inv((~ex.17*x.29)))
-       z     = x.28^(x.30*inv(x.29))
+    6. ~ex   = ~ex.18
+       Y     = x.30^(x.31*inv((~ex.18*x.32)))
+       z     = x.30^(x.31*inv(x.32))
   */
 
 rule (modulo E) Resp_1:
@@ -100,7 +106,8 @@ rule (modulo E) Resp_1:
           kdf(<X^~ey, $A, $B, X, em(hp($A), pmult(~s, hp($B)))^~ey>)
   ),
   Sid( ~ey, <'Resp', $B, $A, X, em(hp($A), pmult(~s, hp($B)))^~ey> ),
-  Match( ~ey, <'Init', $A, $B, X, em(hp($A), pmult(~s, hp($B)))^~ey> )
+  Match( ~ey, <'Init', $A, $B, X, em(hp($A), pmult(~s, hp($B)))^~ey> ),
+  NotNeutral( X )
   ]->
    [
    Out( em(hp($A), pmult(~s, hp($B)))^~ey ),
@@ -113,7 +120,8 @@ rule (modulo E) Resp_1:
     --[
     Accept( ~ey, $B, $A, kdf(<z, $A, $B, X, em(hp($A), hp($B))^(~ey*~x)>) ),
     Sid( ~ey, <'Resp', $B, $A, X, em(hp($A), hp($B))^(~ey*~x)> ),
-    Match( ~ey, <'Init', $A, $B, X, em(hp($A), hp($B))^(~ey*~x)> )
+    Match( ~ey, <'Init', $A, $B, X, em(hp($A), hp($B))^(~ey*~x)> ),
+    NotNeutral( X )
     ]->
      [
      Out( em(hp($A), hp($B))^(~ey*~x) ),
@@ -132,18 +140,22 @@ rule (modulo E) Resp_1:
        X     = x.739^x.740
        z     = x.739^(~ey.372*x.740)
     
-    4. ~ey   = ~ey.373
-       X     = x.741^inv((~ey.373*x.742))
-       z     = x.741^inv(x.742)
+    4. ~ey   = ~ey.374
+       X     = x.743^inv((~ey.374*x.744))
+       z     = x.743^inv(x.744)
     
-    5. ~ey   = ~ey.373
-       X     = x.741^(x.742*inv(~ey.373))
-       z     = x.741^x.742
+    5. ~ey   = ~ey.374
+       X     = x.743^(x.744*inv(~ey.374))
+       z     = x.743^x.744
     
-    6. ~ey   = ~ey.374
-       X     = x.742^(x.744*inv((~ey.374*x.743)))
-       z     = x.742^(x.744*inv(x.743))
+    6. ~ey   = ~ey.375
+       X     = x.744^(x.745*inv((~ey.375*x.746)))
+       z     = x.744^(x.745*inv(x.746))
   */
+
+restriction notneutral:
+  "∀ x #i. (NotNeutral( x ) @ #i) ⇒ (¬(x = DH_neutral))"
+  // safety formula
 
 lemma key_agreement_reachable:
   exists-trace
@@ -316,7 +328,7 @@ solve( (∃ matching #i3 #i4 sid.
                   case Reveal_ltk_case_2
                   by solve( !KU( ~ex ) @ #vk.12 )
                 next
-                  case cexp
+                  case c_exp
                   by solve( !KU( ~ex ) @ #vk.12 )
                 qed
               qed
@@ -402,7 +414,7 @@ solve( (∃ matching #i3 #i4 sid.
                 case Reveal_ltk_case_2
                 by solve( !KU( ~ex ) @ #vk.12 )
               next
-                case cexp
+                case c_exp
                 by solve( !KU( ~ex ) @ #vk.12 )
               qed
             qed
@@ -445,13 +457,13 @@ next
               by contradiction /* from formulas */
             qed
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.10 )
           qed
         next
           case split_case_2
           solve( !KU( z^inv(~ex) ) @ #vk.1 )
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.11 )
           qed
         next
@@ -477,7 +489,7 @@ next
               case Reveal_ltk_case_2
               by contradiction /* from formulas */
             next
-              case cexp
+              case c_exp
               solve( !KU( ~s ) @ #vk.10 )
                 case Reveal_master_key
                 by contradiction /* from formulas */
@@ -789,7 +801,7 @@ next
               case Reveal_ltk_case_16
               by contradiction /* from formulas */
             next
-              case cexp
+              case c_exp
               solve( !KU( ~s ) @ #vk.13 )
                 case Reveal_master_key
                 by contradiction /* from formulas */
@@ -895,13 +907,13 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ex ) @ #vk.11 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.12 )
           qed
         next
           case split_case_4
           solve( !KU( x^inv((~ex*x.1)) ) @ #vk.1 )
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.13 )
           qed
         next
@@ -997,7 +1009,7 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ex ) @ #vk.13 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.14 )
           qed
         next
@@ -1099,7 +1111,7 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ex ) @ #vk.14 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ex ) @ #vk.15 )
           qed
         qed
@@ -1126,13 +1138,13 @@ next
               by contradiction /* from formulas */
             qed
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.10 )
           qed
         next
           case split_case_2
           solve( !KU( z^inv(~ey) ) @ #vk.1 )
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.11 )
           qed
         next
@@ -1194,7 +1206,7 @@ next
               case Reveal_ltk_case_2
               by contradiction /* from formulas */
             next
-              case cexp
+              case c_exp
               solve( !KU( ~x ) @ #vk.10 )
                 case Reveal_master_key
                 by contradiction /* from formulas */
@@ -1506,7 +1518,7 @@ next
               case Reveal_ltk_case_16
               by contradiction /* from formulas */
             next
-              case cexp
+              case c_exp
               solve( !KU( ~x ) @ #vk.13 )
                 case Reveal_master_key
                 by contradiction /* from formulas */
@@ -1576,13 +1588,13 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ey ) @ #vk.11 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.12 )
           qed
         next
           case split_case_4
           solve( !KU( x.1^inv((~ey*x.2)) ) @ #vk.1 )
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.13 )
           qed
         next
@@ -1678,7 +1690,7 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ey ) @ #vk.13 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.14 )
           qed
         next
@@ -1780,7 +1792,7 @@ next
             case Reveal_ltk_case_4
             by solve( !KU( ~ey ) @ #vk.14 )
           next
-            case cexp
+            case c_exp
             by solve( !KU( ~ey ) @ #vk.15 )
           qed
         qed
@@ -1789,15 +1801,17 @@ next
   qed
 qed
 
+
+
+
+
 /* All well-formedness checks were successful. */
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/ake/bilinear/Scott.spthy
@@ -1805,8 +1819,8 @@ analyzing: examples/ake/bilinear/Scott.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/ake/bilinear/Scott.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 20.481474s
+  output:          examples/ake/bilinear/Scott.spthy.tmp
+  processing time: 19.741494243s
   key_agreement_reachable (exists-trace): verified (10 steps)
   key_secrecy (all-traces): verified (518 steps)
 
@@ -1817,8 +1831,8 @@ summary of summaries:
 
 analyzed: examples/ake/bilinear/Scott.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 20.481474s
+  output:          examples/ake/bilinear/Scott.spthy.tmp
+  processing time: 19.741494243s
   key_agreement_reachable (exists-trace): verified (10 steps)
   key_secrecy (all-traces): verified (518 steps)
 

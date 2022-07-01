@@ -2,25 +2,29 @@ name:               tamarin-prover-theory
 
 cabal-version:      >= 1.8
 build-type:         Simple
-version:            1.3.0
+version:            1.7.1
 license:            GPL
 license-file:       LICENSE
 category:           Theorem Provers
 author:             Benedikt Schmidt <benedikt.schmidt@inf.ethz.ch>,
-                    Simon Meier <simon.meier@inf.ethz.ch>
-maintainer:         Benedikt Schmidt <benedikt.schmidt@inf.ethz.ch>
-copyright:          Benedikt Schmidt, Simon Meier, ETH Zurich, 2010-2012
+                    Simon Meier <simon.meier@inf.ethz.ch>,
+                    Jannik Dreier <research@jannikdreier.net>,
+                    Ralf Sasse <ralf.sasse@gmail.com>
+maintainer:         Cas Cremers <cremers@cispa.de>,
+                    Jannik Dreier <research@jannikdreier.net>,
+                    Ralf Sasse <ralf.sasse@gmail.com>
+copyright:          Benedikt Schmidt, Simon Meier, Jannik Dreier, Ralf Sasse, ETH Zurich, 2010-2018
 
-synopsis:           Term manipulation library for the tamarin prover.
+synopsis:           Security protocol types and constraint solver library for the tamarin prover.
 
 description:        This is an internal library of the Tamarin prover for
                     security protocol verification
                     (<hackage.haskell.org/package/tamarin-prover>).
                     .
                     This library provides the types to represent security
-                    protocol, and it implements the constraint solver.
+                    protocols, and it implements the constraint solver.
 
-homepage:           http://www.infsec.ethz.ch/research/software/tamarin
+homepage:           https://tamarin-prover.github.io/
 
 
 source-repository head
@@ -46,6 +50,7 @@ library
       , deepseq
       , dlist
       , fclabels
+      , filepath
       , mtl
       , parallel
       , parsec
@@ -54,6 +59,7 @@ library
       , text
       , transformers
       , uniplate
+      , exceptions
 
       , tamarin-prover-utils
       , tamarin-prover-term
@@ -64,6 +70,7 @@ library
     exposed-modules:
       Theory
       Theory.Proof
+      Theory.ProofSkeleton
 
       Theory.Constraint.Solver
       Theory.Constraint.Solver.Sources
@@ -72,7 +79,7 @@ library
       Theory.Constraint.Solver.ProofMethod
       Theory.Constraint.Solver.Reduction
       Theory.Constraint.Solver.Simplify
-      Theory.Constraint.Solver.Types
+      Theory.Constraint.Solver.Heuristics
 
       Theory.Constraint.System
       Theory.Constraint.System.Constraints
@@ -80,16 +87,28 @@ library
       Theory.Constraint.System.JSON
       Theory.Constraint.System.Guarded
 
+      Theory.Sapic.Term
+      Theory.Sapic.Pattern
+      Theory.Sapic.Process
+      Theory.Sapic.Position
+      Theory.Sapic.Annotation
+      Theory.Sapic
+      Theory.Sapic.Print
+
       Theory.Model
       Theory.Model.Atom
       Theory.Model.Fact
       Theory.Model.Formula
       Theory.Model.Rule
       Theory.Model.Signature
+      Theory.Model.Restriction
+
+      Theory.Module
 
       Theory.Text.Pretty
       Theory.Text.Parser
       Theory.Text.Parser.Token
+      Theory.Text.Parser.Restriction
 
       Theory.Tools.AbstractInterpretation
       Theory.Tools.EquationStore
@@ -98,5 +117,36 @@ library
       Theory.Tools.LoopBreakers
       Theory.Tools.RuleVariants
       Theory.Tools.Wellformedness
+      TheoryObject
+      Lemma
+      OpenTheory
+      ClosedTheory
+      Rule
+      Prover
+      Items.LemmaItem
+      Items.OpenTheoryItem
+      Items.OptionItem
+      Items.RuleItem
+      Items.ProcessItem
+      Items.TheoryItem
+      Items.ExportInfo
+      Items.CaseTestItem
+      Items.AccLemmaItem
+      Pretty
+
 
     other-modules:
+      Theory.Syntactic.Predicate
+      Theory.Text.Parser.Accountability
+      Theory.Text.Parser.Exceptions
+      Theory.Text.Parser.Fact
+      Theory.Text.Parser.Formula
+      Theory.Text.Parser.Lemma
+      Theory.Text.Parser.Let
+      Theory.Text.Parser.Proof
+      Theory.Text.Parser.Rule
+      Theory.Text.Parser.Sapic
+      Theory.Text.Parser.Signature
+      Theory.Text.Parser.Term
+      Theory.Sapic.PlainProcess
+      Theory.Sapic.Substitution

@@ -66,10 +66,9 @@ import qualified Data.Text           as T
 import           Data.Time.LocalTime
 import qualified Data.Binary         as Bin
 import           Data.Binary.Orphans()
+import           Data.Binary.Instances()
 
 import           Control.DeepSeq
-import           Control.Monad
--- import           Control.Monad
 import           GHC.Generics (Generic)
 
 import           Text.Hamlet
@@ -78,11 +77,6 @@ import           Yesod.Static
 
 import           Theory
 
-
--- | Derived Instances to fix things
-instance Bin.Binary ZonedTime where
-  get = liftM2 ZonedTime Bin.get Bin.get
-  put (ZonedTime d tod) = Bin.put d >> Bin.put tod
 
 ------------------------------------------------------------------------------
 -- Types
@@ -132,6 +126,8 @@ data WebUI = WebUI
     -- ^ Close an open theory according to command-line arguments.
   , diffParseThy       :: String -> IO (Either String (ClosedDiffTheory))
     -- ^ Close an open theory according to command-line arguments.
+  , thyWf              :: String -> IO String
+    -- ^ Report on the wellformedness of a theory according to command-line arguments.
   , theoryVar          :: MVar (TheoryMap)
     -- ^ MVar that holds the theory map
   , threadVar          :: MVar ThreadMap
@@ -563,6 +559,7 @@ mkYesodData "WebUI" [parseRoutes|
 -- /thy/trace/#Int/debug/*TheoryPath             TheoryPathDR            GET
 /thy/trace/#Int/graph/*TheoryPath             TheoryGraphR            GET
 /thy/trace/#Int/autoprove/#SolutionExtractor/#Int/*TheoryPath AutoProverR             GET
+/thy/trace/#Int/autoproveAll/#SolutionExtractor/#Int/*TheoryPath AutoProverAllR             GET
 /thy/trace/#Int/next/#String/*TheoryPath      NextTheoryPathR         GET
 /thy/trace/#Int/prev/#String/*TheoryPath      PrevTheoryPathR         GET
 -- /thy/trace/#Int/save                             SaveTheoryR             GET
@@ -579,6 +576,7 @@ mkYesodData "WebUI" [parseRoutes|
 /thy/equiv/#Int/graph/*DiffTheoryPath         TheoryGraphDiffR            GET
 /thy/equiv/#Int/mirror/*DiffTheoryPath        TheoryMirrorDiffR            GET
 /thy/equiv/#Int/autoprove/#SolutionExtractor/#Int/#Side/*DiffTheoryPath AutoProverDiffR             GET
+/thy/equiv/#Int/autoproveAll/#SolutionExtractor/#Int AutoProverAllDiffR             GET
 /thy/equiv/#Int/autoproveDiff/#SolutionExtractor/#Int/*DiffTheoryPath AutoDiffProverR             GET
 /thy/equiv/#Int/next/#String/*DiffTheoryPath  NextTheoryPathDiffR         GET
 /thy/equiv/#Int/prev/#String/*DiffTheoryPath  PrevTheoryPathDiffR         GET
@@ -597,13 +595,15 @@ mkYesodData "WebUI" [parseRoutes|
 
 
 instance PathPiece SolutionExtractor where
-  toPathPiece CutNothing = "characterize"
-  toPathPiece CutDFS     = "idfs"
-  toPathPiece CutBFS     = "bfs"
+  toPathPiece CutNothing         = "characterize"
+  toPathPiece CutDFS             = "idfs"
+  toPathPiece CutBFS             = "bfs"
+  toPathPiece CutSingleThreadDFS = "seqdfs"
 
   fromPathPiece "characterize" = Just CutNothing
   fromPathPiece "idfs"         = Just CutDFS
   fromPathPiece "bfs"          = Just CutBFS
+  fromPathPiece "seqdfs"       = Just CutSingleThreadDFS
   fromPathPiece _              = Nothing
 
 instance PathPiece Side where

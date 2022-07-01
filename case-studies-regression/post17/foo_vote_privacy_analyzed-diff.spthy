@@ -3,8 +3,8 @@ theory FOO_Vote_Privacy begin
 // Function signature and definition of the equational theory E
 
 builtins: multiset
-functions: blind/2, checksign/2, commit/2, fst/1, open/2, pair/2, pk/1,
-           sign/2, snd/1, unblind/2
+functions: blind/2, checksign/2, commit/2, fst/1[destructor], open/2,
+           pair/2, pk/1, sign/2, snd/1[destructor], unblind/2
 equations:
     checksign(sign(m, sk), pk(sk)) = m,
     fst(<x.1, x.2>) = x.1,
@@ -12,6 +12,8 @@ equations:
     snd(<x.1, x.2>) = x.2,
     unblind(blind(m, r), r) = m,
     unblind(sign(blind(m, r), sk), r) = sign(m, sk)
+
+
 
 rule (modulo E) Register_Voter_pk:
    [ Fr( ~ltkV ) ]
@@ -21887,10 +21889,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/post17/foo_vote_privacy.spthy
@@ -21898,8 +21898,8 @@ analyzing: examples/post17/foo_vote_privacy.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/post17/foo_vote_privacy.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 311.165358s
+  output:          examples/post17/foo_vote_privacy.spthy.tmp
+  processing time: 517.789299278s
   RHS :  exec (exists-trace): verified (12 steps)
   LHS :  exec (exists-trace): verified (12 steps)
   DiffLemma:  Observational_equivalence : verified (7204 steps)
@@ -21911,8 +21911,8 @@ summary of summaries:
 
 analyzed: examples/post17/foo_vote_privacy.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 311.165358s
+  output:          examples/post17/foo_vote_privacy.spthy.tmp
+  processing time: 517.789299278s
   RHS :  exec (exists-trace): verified (12 steps)
   LHS :  exec (exists-trace): verified (12 steps)
   DiffLemma:  Observational_equivalence : verified (7204 steps)

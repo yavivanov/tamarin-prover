@@ -2,8 +2,8 @@ theory Okamoto_Eligibilty begin
 
 // Function signature and definition of the equational theory E
 
-functions: blind/2, checksign/2, f/4, fst/1, open/2, pair/2, pk/1,
-           sign/2, snd/1, tdcommit/3, unblind/2
+functions: blind/2, checksign/2, f/4, fst/1[destructor], open/2, pair/2,
+           pk/1, sign/2, snd/1[destructor], tdcommit/3, unblind/2
 equations:
     checksign(sign(m, sk), pk(sk)) = m,
     f(m1, f(m, r, td, m1), td, m2) = f(m, r, td, m2),
@@ -14,6 +14,8 @@ equations:
     tdcommit(m2, f(m1, r, td, m2), td) = tdcommit(m1, r, td),
     unblind(blind(m, b), b) = m,
     unblind(sign(blind(m, b), sk), b) = sign(m, sk)
+
+
 
 rule (modulo E) Register_Voter_pk:
    [ Fr( ~ltkV ) ]
@@ -99,7 +101,7 @@ next
         case Register_Voter_pk
         solve( !KU( sign(e, ~ltkV) ) @ #vk.2 )
           case A_1
-          solve( (#vr.5, 0) ~~> (#vk, 0) )
+          solve( (#vr.7, 0) ~~> (#vk, 0) )
             case d_0_open
             by contradiction /* forbidden KD-fact */
           qed
@@ -107,7 +109,7 @@ next
           case V_1_case_1
           solve( !KU( ~b ) @ #vk.3 )
             case A_1
-            solve( (#vr.9, 0) ~~> (#vk.1, 0) )
+            solve( (#vr.11, 0) ~~> (#vk.1, 0) )
               case d_0_open
               by contradiction /* forbidden KD-fact */
             qed
@@ -119,7 +121,7 @@ next
           case V_1_case_3
           solve( !KU( ~b ) @ #vk.4 )
             case A_1
-            solve( (#vr.10, 0) ~~> (#vk.1, 0) )
+            solve( (#vr.12, 0) ~~> (#vk.1, 0) )
               case d_0_open
               by contradiction /* forbidden KD-fact */
             qed
@@ -128,7 +130,7 @@ next
           case V_1_case_4
           solve( !KU( ~b ) @ #vk.3 )
             case A_1
-            solve( (#vr.8, 0) ~~> (#vk.1, 0) )
+            solve( (#vr.10, 0) ~~> (#vk.1, 0) )
               case d_0_open
               by contradiction /* forbidden KD-fact */
             qed
@@ -137,7 +139,7 @@ next
           case c_sign
           solve( !KU( ~ltkV ) @ #vk.3 )
             case A_1
-            solve( (#vr.5, 0) ~~> (#vk.1, 0) )
+            solve( (#vr.7, 0) ~~> (#vk.1, 0) )
               case d_0_open
               by contradiction /* forbidden KD-fact */
             qed
@@ -197,15 +199,29 @@ solve( P_Ch_Timeliness( $vote, ~r, x ) ▶₀ #j )
   qed
 qed
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* All well-formedness checks were successful. */
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/post17/okamoto_eligibility.spthy
@@ -213,8 +229,8 @@ analyzing: examples/post17/okamoto_eligibility.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/post17/okamoto_eligibility.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 8.928402s
+  output:          examples/post17/okamoto_eligibility.spthy.tmp
+  processing time: 0.907258753s
   types (all-traces): verified (23 steps)
   exec (exists-trace): verified (6 steps)
   eligibility (all-traces): verified (5 steps)
@@ -226,8 +242,8 @@ summary of summaries:
 
 analyzed: examples/post17/okamoto_eligibility.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 8.928402s
+  output:          examples/post17/okamoto_eligibility.spthy.tmp
+  processing time: 0.907258753s
   types (all-traces): verified (23 steps)
   exec (exists-trace): verified (6 steps)
   eligibility (all-traces): verified (5 steps)

@@ -3,11 +3,20 @@ theory UM_three_pass begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman, multiset
-functions: MAC/2, concat/2, first/1, fst/1, h/1, pair/2, second/1, snd/1
+functions: MAC/2, concat/2, first/1, fst/1[destructor], h/1, pair/2,
+           second/1, snd/1[destructor]
 equations:
     concat(first(x), second(x)) = x,
     fst(<x.1, x.2>) = x.1,
     snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
+
+
 
 rule (modulo E) Register_key_honest:
    [ Fr( ~ea ) ]
@@ -197,8 +206,8 @@ rule (modulo E) I_Complete:
        z     = x.865^x.866
     
     6. ~ex   = ~ex.437
-       Y     = x.866^(x.868*inv((~ex.437*x.867)))
-       z     = x.866^(x.868*inv(x.867))
+       Y     = x.866^(x.867*inv((~ex.437*x.868)))
+       z     = x.866^(x.867*inv(x.868))
   */
 
 rule (modulo E) I_Expire:
@@ -312,8 +321,8 @@ rule (modulo E) R_Activate:
        z     = x.661^x.662
     
     6. ~ey   = ~ey.335
-       X     = x.662^(x.664*inv((~ey.335*x.663)))
-       z     = x.662^(x.664*inv(x.663))
+       X     = x.662^(x.663*inv((~ey.335*x.664)))
+       z     = x.662^(x.663*inv(x.664))
   */
 
 rule (modulo E) R_Complete:
@@ -490,8 +499,8 @@ rule (modulo E) R_Complete:
        z     = x.837^x.838
     
     6. ~ey   = ~ey.423
-       X     = x.838^(x.840*inv((~ey.423*x.839)))
-       z     = x.838^(x.840*inv(x.839))
+       X     = x.838^(x.839*inv((~ey.423*x.840)))
+       z     = x.838^(x.839*inv(x.840))
   */
 
 rule (modulo E) R_Expire:
@@ -917,7 +926,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.14 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.16 )
                             qed
                           qed
@@ -1135,7 +1144,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.14 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.16 )
                             qed
                           qed
@@ -1188,7 +1197,7 @@ solve( (∃ #l matchingComm.
                           case R_Activate
                           by solve( !KU( ~ex ) @ #vk.15 )
                         next
-                          case cexp
+                          case c_exp
                           by solve( !KU( ~ex ) @ #vk.17 )
                         qed
                       qed
@@ -1544,7 +1553,7 @@ solve( (∃ #l matchingComm.
                                       case R_Activate
                                       by solve( !KU( ~ex ) @ #vk.15 )
                                     next
-                                      case cexp
+                                      case c_exp
                                       by solve( !KU( ~ex ) @ #vk.17 )
                                     qed
                                   qed
@@ -1581,7 +1590,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.14 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.16 )
                             qed
                           qed
@@ -1744,7 +1753,7 @@ solve( (∃ #l matchingComm.
                                           case R_Activate
                                           by solve( !KU( ~ex ) @ #vk.19 )
                                         next
-                                          case cexp
+                                          case c_exp
                                           by solve( !KU( ~ex ) @ #vk.21 )
                                         qed
                                       qed
@@ -1790,7 +1799,7 @@ solve( (∃ #l matchingComm.
                               qed
                             qed
                           next
-                            case cexp
+                            case c_exp
                             solve( !KU( ~ea ) @ #vk.19 )
                               case Corrupt_Ltk
                               solve( Expire( <'UM3', $A, $A, 
@@ -1940,7 +1949,7 @@ solve( (∃ #l matchingComm.
                                           case R_Activate
                                           by solve( !KU( ~ex ) @ #vk.21 )
                                         next
-                                          case cexp
+                                          case c_exp
                                           by solve( !KU( ~ex ) @ #vk.22 )
                                         qed
                                       qed
@@ -2123,7 +2132,7 @@ solve( (∃ #l matchingComm.
                                       case R_Activate
                                       by solve( !KU( ~ex ) @ #vk.15 )
                                     next
-                                      case cexp
+                                      case c_exp
                                       by solve( !KU( ~ex ) @ #vk.17 )
                                     qed
                                   qed
@@ -2160,7 +2169,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.14 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.16 )
                             qed
                           qed
@@ -2185,7 +2194,7 @@ solve( (∃ #l matchingComm.
                               qed
                             qed
                           next
-                            case cexp
+                            case c_exp
                             solve( !KU( ~ea ) @ #vk.19 )
                               case Corrupt_Ltk
                               solve( Expire( <'UM3', $A, $A, 'g'^~ex> ) @ #l )
@@ -2350,7 +2359,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -2422,7 +2431,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -2489,7 +2498,7 @@ solve( (∃ #l matchingComm.
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -2531,7 +2540,7 @@ solve( (∃ #l matchingComm.
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -2691,7 +2700,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -2727,7 +2736,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -2776,7 +2785,7 @@ solve( (∃ #l matchingComm.
                                   case R_Activate
                                   by solve( !KU( ~ex ) @ #vk.16 )
                                 next
-                                  case cexp
+                                  case c_exp
                                   by solve( !KU( ~ex ) @ #vk.18 )
                                 qed
                               qed
@@ -2829,7 +2838,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.16 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.18 )
                             qed
                           qed
@@ -3010,7 +3019,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -3048,7 +3057,7 @@ solve( (∃ #l matchingComm.
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -3269,7 +3278,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -3307,7 +3316,7 @@ solve( (∃ #l matchingComm.
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -3388,7 +3397,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.16 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.18 )
                             qed
                           qed
@@ -3448,7 +3457,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.16 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.18 )
                             qed
                           qed
@@ -3596,7 +3605,7 @@ solve( (∃ #l matchingComm.
                               qed
                             qed
                           next
-                            case cexp
+                            case c_exp
                             solve( !KU( ~eb ) @ #vk.21 )
                               case Corrupt_Ltk
                               solve( Expire( <'UM3', $A, $A, 
@@ -3850,7 +3859,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -3886,7 +3895,7 @@ solve( (∃ #l matchingComm.
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.15 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.17 )
                                   qed
                                 qed
@@ -3966,7 +3975,7 @@ solve( (∃ #l matchingComm.
                                             case R_Activate
                                             by solve( !KU( ~ex ) @ #vk.22 )
                                           next
-                                            case cexp
+                                            case c_exp
                                             by solve( !KU( ~ex ) @ #vk.24 )
                                           qed
                                         next
@@ -4004,7 +4013,7 @@ solve( (∃ #l matchingComm.
                                     qed
                                   qed
                                 next
-                                  case cexp
+                                  case c_exp
                                   solve( !KU( ~eb ) @ #vk.21 )
                                     case Corrupt_Ltk
                                     solve( Expire( <'UM3', $A, $A, 
@@ -4071,7 +4080,7 @@ solve( (∃ #l matchingComm.
                                             case R_Activate
                                             by solve( !KU( ~ex ) @ #vk.24 )
                                           next
-                                            case cexp
+                                            case c_exp
                                             by solve( !KU( ~ex ) @ #vk.25 )
                                           qed
                                         next
@@ -4175,7 +4184,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.15 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.17 )
                             qed
                           qed
@@ -4211,7 +4220,7 @@ solve( (∃ #l matchingComm.
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.15 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.17 )
                             qed
                           qed
@@ -4412,7 +4421,7 @@ solve( (∃ #l matchingComm.
                               qed
                             qed
                           next
-                            case cexp
+                            case c_exp
                             solve( !KU( ~eb ) @ #vk.21 )
                               case Corrupt_Ltk
                               solve( Expire( <'UM3', $A, $A, 
@@ -4878,7 +4887,7 @@ next
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -5164,7 +5173,7 @@ next
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -5317,7 +5326,7 @@ next
                         case R_Activate
                         by solve( !KU( ~ex ) @ #vk.14 )
                       next
-                        case cexp
+                        case c_exp
                         by solve( !KU( ~ex ) @ #vk.16 )
                       qed
                     qed
@@ -5519,7 +5528,7 @@ next
                         case R_Activate
                         by solve( !KU( ~ex ) @ #vk.14 )
                       next
-                        case cexp
+                        case c_exp
                         by solve( !KU( ~ex ) @ #vk.16 )
                       qed
                     qed
@@ -5834,7 +5843,7 @@ next
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -5876,7 +5885,7 @@ next
                                 case R_Activate
                                 by solve( !KU( ~ex ) @ #vk.15 )
                               next
-                                case cexp
+                                case c_exp
                                 by solve( !KU( ~ex ) @ #vk.17 )
                               qed
                             qed
@@ -6030,7 +6039,7 @@ next
                               case R_Activate
                               by solve( !KU( ~ex ) @ #vk.16 )
                             next
-                              case cexp
+                              case c_exp
                               by solve( !KU( ~ex ) @ #vk.18 )
                             qed
                           qed
@@ -6329,7 +6338,7 @@ next
                     case R_Activate
                     by solve( !KU( ~ex ) @ #vk.15 )
                   next
-                    case cexp
+                    case c_exp
                     by solve( !KU( ~ex ) @ #vk.17 )
                   qed
                 qed
@@ -6621,7 +6630,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.19 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.21 )
                                   qed
                                 qed
@@ -7561,7 +7570,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.19 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.21 )
                                   qed
                                 qed
@@ -8222,7 +8231,7 @@ next
                     qed
                   qed
                 next
-                  case cexp
+                  case c_exp
                   solve( !KU( ~ea ) @ #vk.20 )
                     case Corrupt_Ltk
                     solve( Expire( <'UM3', $A, $B, 
@@ -8501,7 +8510,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.21 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.22 )
                                   qed
                                 qed
@@ -9499,7 +9508,7 @@ next
                             case R_Activate
                             by solve( !KU( ~ex ) @ #vk.15 )
                           next
-                            case cexp
+                            case c_exp
                             by solve( !KU( ~ex ) @ #vk.17 )
                           qed
                         qed
@@ -9534,7 +9543,7 @@ next
                         case R_Activate
                         by solve( !KU( ~ex ) @ #vk.15 )
                       next
-                        case cexp
+                        case c_exp
                         by solve( !KU( ~ex ) @ #vk.17 )
                       qed
                     qed
@@ -10072,7 +10081,7 @@ next
                             case R_Activate
                             by solve( !KU( ~ex ) @ #vk.15 )
                           next
-                            case cexp
+                            case c_exp
                             by solve( !KU( ~ex ) @ #vk.17 )
                           qed
                         qed
@@ -10107,7 +10116,7 @@ next
                         case R_Activate
                         by solve( !KU( ~ex ) @ #vk.15 )
                       next
-                        case cexp
+                        case c_exp
                         by solve( !KU( ~ex ) @ #vk.17 )
                       qed
                     qed
@@ -10267,7 +10276,7 @@ next
                       case R_Activate
                       by solve( !KU( ~ex ) @ #vk.16 )
                     next
-                      case cexp
+                      case c_exp
                       by solve( !KU( ~ex ) @ #vk.18 )
                     qed
                   qed
@@ -10477,7 +10486,7 @@ next
                       case R_Activate
                       by solve( !KU( ~ex ) @ #vk.16 )
                     next
-                      case cexp
+                      case c_exp
                       by solve( !KU( ~ex ) @ #vk.18 )
                     qed
                   qed
@@ -10749,7 +10758,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.22 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.24 )
                                   qed
                                 qed
@@ -11689,7 +11698,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.22 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.24 )
                                   qed
                                 qed
@@ -12371,7 +12380,7 @@ next
                     qed
                   qed
                 next
-                  case cexp
+                  case c_exp
                   solve( !KU( ~eb ) @ #vk.22 )
                     case Corrupt_Ltk
                     solve( Expire( <'UM3', $B, $A, 
@@ -12629,7 +12638,7 @@ next
                                     case R_Activate
                                     by solve( !KU( ~ex ) @ #vk.24 )
                                   next
-                                    case cexp
+                                    case c_exp
                                     by solve( !KU( ~ex ) @ #vk.25 )
                                   qed
                                 qed
@@ -13320,15 +13329,21 @@ next
   qed
 qed
 
+
+
+
+
+
+
+
+
 /* All well-formedness checks were successful. */
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/ake/dh/UM_three_pass.spthy
@@ -13336,8 +13351,8 @@ analyzing: examples/ake/dh/UM_three_pass.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/ake/dh/UM_three_pass.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 149.129579s
+  output:          examples/ake/dh/UM_three_pass.spthy.tmp
+  processing time: 243.742273744s
   key_agreement_reachable (exists-trace): verified (14 steps)
   CK_secure_UM3 (all-traces): verified (1170 steps)
 
@@ -13348,8 +13363,8 @@ summary of summaries:
 
 analyzed: examples/ake/dh/UM_three_pass.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 149.129579s
+  output:          examples/ake/dh/UM_three_pass.spthy.tmp
+  processing time: 243.742273744s
   key_agreement_reachable (exists-trace): verified (14 steps)
   CK_secure_UM3 (all-traces): verified (1170 steps)
 

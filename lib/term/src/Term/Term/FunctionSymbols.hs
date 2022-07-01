@@ -7,7 +7,7 @@
 -- |
 -- Copyright   : (c) 2010-2012 Benedikt Schmidt & Simon Meier
 -- License     : GPL v3 (see LICENSE)
--- 
+--
 -- Maintainer  : Benedikt Schmidt <beschmi@gmail.com>
 --
 -- Function Symbols and Signatures.
@@ -17,6 +17,7 @@ module Term.Term.FunctionSymbols (
     , ACSym(..)
     , CSym(..)
     , Privacy(..)
+    , Constructability(..)
     , NoEqSym
 
     -- ** Signatures
@@ -25,30 +26,39 @@ module Term.Term.FunctionSymbols (
 
     -- ** concrete symbols strings
     , diffSymString
+    , munSymString
     , expSymString
     , invSymString
+    , dhNeutralSymString
     , pmultSymString
     , emapSymString
     , unionSymString
+    , oneSymString
+    , multSymString
+    , zeroSymString
+    , xorSymString
 
     -- ** concrete symbols
     , diffSym
     , expSym
     , pmultSym
     , oneSym
+    , dhNeutralSym
     , invSym
     , pairSym
     , fstSym
     , sndSym
+    , zeroSym
 
     -- ** concrete signatures
     , dhFunSig
+    , xorFunSig
     , bpFunSig
     , msetFunSig
     , pairFunSig
-    , diffFunSig
     , dhReducibleFunSig
     , bpReducibleFunSig
+    , xorReducibleFunSig
     , implicitFunSig
     ) where
 
@@ -72,15 +82,20 @@ import qualified Data.Set as S
 ----------------------------------------------------------------------
 
 -- | AC function symbols.
-data ACSym = Union | Mult
+data ACSym = Union | Mult | Xor
   deriving (Eq, Ord, Typeable, Data, Show, Generic, NFData, Binary)
 
 -- | A function symbol can be either Private (unknown to adversary) or Public.
 data Privacy = Private | Public
   deriving (Eq, Ord, Typeable, Data, Show, Generic, NFData, Binary)
 
+-- | A function symbol can be either a constructor or a destructor in which
+-- case it only applies if it reduces.
+data Constructability = Constructor | Destructor
+  deriving (Eq, Ord, Typeable, Data, Show, Generic, NFData, Binary)
+
 -- | NoEq function symbols (with respect to the background theory).
-type NoEqSym = (ByteString, (Int, Privacy)) -- ^ operator name, arity, private
+type NoEqSym = (ByteString, (Int, Privacy,Constructability)) -- ^ operator name, arity, private, destructor
 
 -- | C(ommutative) function symbols
 data CSym = EMap
@@ -103,10 +118,16 @@ type NoEqFunSig = Set NoEqSym
 -- Fixed function symbols
 ----------------------------------------------------------------------
 
-diffSymString, expSymString, invSymString :: ByteString
+diffSymString, munSymString, expSymString, invSymString, dhNeutralSymString, oneSymString, multSymString, xorSymString, zeroSymString :: ByteString
 diffSymString = "diff"
+munSymString = "mun"
 expSymString = "exp"
 invSymString = "inv"
+oneSymString = "one"
+dhNeutralSymString = "DH_neutral"
+multSymString = "mult"
+zeroSymString = "zero"
+xorSymString = "xor"
 
 unionSymString :: ByteString
 unionSymString = "union"
@@ -115,23 +136,27 @@ emapSymString, pmultSymString :: ByteString
 emapSymString  = "em"
 pmultSymString = "pmult"
 
-pairSym, diffSym, expSym, invSym, oneSym, fstSym, sndSym, pmultSym :: NoEqSym
+pairSym, diffSym, expSym, invSym, dhNeutralSym, oneSym, fstSym, sndSym, pmultSym, zeroSym :: NoEqSym
 -- | Pairing.
-pairSym  = ("pair",(2,Public))
+pairSym  = ("pair",(2,Public,Constructor))
 -- | Diff.
-diffSym  = (diffSymString,(2,Private))
+diffSym  = (diffSymString,(2,Private,Constructor))
 -- | Exponentiation.
-expSym   = (expSymString,(2,Public))
+expSym   = (expSymString,(2,Public,Constructor))
 -- | The inverse in the groups of exponents.
-invSym   = (invSymString,(1,Public))
+invSym   = (invSymString,(1,Public,Constructor))
 -- | The one in the group of exponents.
-oneSym   = ("one",(0,Public))
+oneSym   = (oneSymString,(0,Public,Constructor))
+-- | The groupd identity
+dhNeutralSym = (dhNeutralSymString,(0,Public, Constructor))
 -- | Projection of first component of pair.
-fstSym   = ("fst",(1,Public))
+fstSym   = ("fst",(1,Public,Destructor))
 -- | Projection of second component of pair.
-sndSym   = ("snd",(1,Public))
+sndSym   = ("snd",(1,Public,Destructor))
 -- | Multiplication of points (in G1) on elliptic curve by scalars.
-pmultSym = (pmultSymString,(2,Public))
+pmultSym = (pmultSymString,(2,Public,Constructor))
+-- | The zero for XOR.
+zeroSym  = (zeroSymString,(0,Public,Constructor))
 
 ----------------------------------------------------------------------
 -- Fixed signatures
@@ -139,7 +164,11 @@ pmultSym = (pmultSymString,(2,Public))
 
 -- | The signature for Diffie-Hellman function symbols.
 dhFunSig :: FunSig
-dhFunSig = S.fromList [ AC Mult, NoEq expSym, NoEq oneSym, NoEq invSym ]
+dhFunSig = S.fromList [ AC Mult, NoEq expSym, NoEq oneSym, NoEq invSym, NoEq dhNeutralSym ]
+
+-- | The signature for Xor function symbols.
+xorFunSig :: FunSig
+xorFunSig = S.fromList [ AC Xor, NoEq zeroSym ]
 
 -- | The signature for the bilinear pairing function symbols.
 bpFunSig :: FunSig
@@ -153,10 +182,6 @@ msetFunSig = S.fromList [AC Union]
 pairFunSig :: NoEqFunSig
 pairFunSig = S.fromList [ pairSym, fstSym, sndSym ]
 
--- | The signature for diff terms.
-diffFunSig :: NoEqFunSig
-diffFunSig = S.fromList [ diffSym ]
-
 -- | Reducible function symbols for DH.
 dhReducibleFunSig :: FunSig
 dhReducibleFunSig = S.fromList [ NoEq expSym, NoEq invSym ]
@@ -164,6 +189,10 @@ dhReducibleFunSig = S.fromList [ NoEq expSym, NoEq invSym ]
 -- | Reducible function symbols for BP.
 bpReducibleFunSig :: FunSig
 bpReducibleFunSig = S.fromList [ NoEq pmultSym, C EMap ]
+
+-- | Reducible function symbols for XOR.
+xorReducibleFunSig :: FunSig
+xorReducibleFunSig = S.fromList [ AC Xor ]
 
 -- | Implicit function symbols.
 implicitFunSig :: FunSig

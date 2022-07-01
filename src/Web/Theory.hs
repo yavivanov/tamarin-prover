@@ -40,13 +40,15 @@ module Web.Theory
   )
 where
 
+import           Accountability.Generation    (checkPreTransWellformedness)
+
 import           Debug.Trace                  (trace)
 
 import           Data.Char                    (toUpper)
 import           Data.List
 import qualified Data.Map                     as M
 import           Data.Maybe
-import           Data.Monoid
+-- import           Data.Monoid
 import qualified Data.Set                     as S
 import qualified Data.Text                    as T
 import           Data.Time.Format             (formatTime)
@@ -78,6 +80,7 @@ import           Logic.Connectives
 import           Theory
 import           Theory.Constraint.System.Dot (nonEmptyGraph,nonEmptyGraphDiff)
 import           Theory.Text.Pretty
+import           Theory.Tools.Wellformedness
 
 import           Web.Settings
 import           Web.Types
@@ -88,14 +91,15 @@ import           Web.Types
 ------------------------------------------------------------------------------
 
 applyMethodAtPath :: ClosedTheory -> String -> ProofPath
-                  -> Heuristic             -- ^ How to extract/order the proof methods.
+                  -> AutoProver            -- ^ How to extract/order the proof methods.
                   -> Int                   -- What proof method to use.
                   -> Maybe ClosedTheory
-applyMethodAtPath thy lemmaName proofPath heuristic i = do
+applyMethodAtPath thy lemmaName proofPath prover i = do
     lemma <- lookupLemma lemmaName thy
     subProof <- get lProof lemma `atPath` proofPath
     let ctxt  = getProofContext lemma thy
         sys   = psInfo (root subProof)
+        heuristic = selectHeuristic prover ctxt
         ranking = useHeuristic heuristic (length proofPath)
     methods <- (map fst . rankProofMethods ranking ctxt) <$> sys
     method <- if length methods >= i then Just (methods !! (i-1)) else Nothing
@@ -107,14 +111,15 @@ applyMethodAtPath thy lemmaName proofPath heuristic i = do
       )
 
 applyMethodAtPathDiff :: ClosedDiffTheory -> Side -> String -> ProofPath
-                      -> Heuristic             -- ^ How to extract/order the proof methods.
+                      -> AutoProver             -- ^ How to extract/order the proof methods.
                       -> Int                   -- What proof method to use.
                       -> Maybe ClosedDiffTheory
-applyMethodAtPathDiff thy s lemmaName proofPath heuristic i = do
+applyMethodAtPathDiff thy s lemmaName proofPath prover i = do
     lemma <- lookupLemmaDiff s lemmaName thy
     subProof <- get lProof lemma `atPath` proofPath
     let ctxt  = getProofContextDiff s lemma thy
         sys   = psInfo (root subProof)
+        heuristic = selectHeuristic prover ctxt
         ranking = useHeuristic heuristic (length proofPath)
     methods <- (map fst . rankProofMethods ranking ctxt) <$> sys
     method <- if length methods >= i then Just (methods !! (i-1)) else Nothing
@@ -126,14 +131,15 @@ applyMethodAtPathDiff thy s lemmaName proofPath heuristic i = do
       )
 
 applyDiffMethodAtPath :: ClosedDiffTheory -> String -> ProofPath
-                      -> Heuristic             -- ^ How to extract/order the proof methods.
+                      -> AutoProver             -- ^ How to extract/order the proof methods.
                       -> Int                   -- What proof method to use.
                       -> Maybe ClosedDiffTheory
-applyDiffMethodAtPath thy lemmaName proofPath heuristic i = do
+applyDiffMethodAtPath thy lemmaName proofPath prover i = do
     lemma <- lookupDiffLemma lemmaName thy
     subProof <- get lDiffProof lemma `atPathDiff` proofPath
     let ctxt  = getDiffProofContext lemma thy
         sys   = dpsInfo (root subProof)
+        heuristic = selectDiffHeuristic prover ctxt
         ranking = useHeuristic heuristic (length proofPath)
     methods <- (map fst . rankDiffProofMethods ranking ctxt) <$> sys
     method <- if length methods >= i then Just (methods !! (i-1)) else Nothing
@@ -172,7 +178,7 @@ refDotPath renderUrl tidx path = closedTag "img" [("class", "graph"), ("src", im
 -- | Reference a dot graph for the given diff path.
 refDotDiffPath :: HtmlDocument d => RenderUrl -> TheoryIdx -> DiffTheoryPath -> Bool -> d
 refDotDiffPath renderUrl tidx path mirror = closedTag "img" [("class", "graph"), ("src", imgPath)]
-    where imgPath = if mirror 
+    where imgPath = if mirror
           then T.unpack $ renderUrl (TheoryMirrorDiffR tidx path)
           else T.unpack $ renderUrl (TheoryGraphDiffR tidx path)
 
@@ -263,7 +269,7 @@ diffProofIndex renderUrl mkRoute =
         removeStep = linkToPath renderUrl (mkRoute . snd . dpsInfo $ step)
           ["remove-step"] emptyDoc
 
-          
+
 -- | Render the indexing links for a single lemma
 lemmaIndex :: HtmlDocument d
            => RenderUrl                   -- ^ The url rendering function
@@ -351,7 +357,7 @@ diffLemmaIndex renderUrl tidx l =
     annPrf = annotateDiffLemmaProof l
     mkRoute proofPath = TheoryPathDiffMR tidx (DiffTheoryDiffProof (get lDiffName l) proofPath)
 
-    
+
 -- | Render the theory index.
 theoryIndex :: HtmlDocument d => RenderUrl -> TheoryIdx -> ClosedTheory -> d
 theoryIndex renderUrl tidx thy = foldr1 ($-$)
@@ -524,11 +530,26 @@ subProofSnippet renderUrl tidx ti lemma proofPath ctxt prf =
           , preformatted (Just "methods") (numbered' $ map prettyPM $ zip [1..] pms)
           , autoProverLinks 'a' ""         emptyDoc      0
           , autoProverLinks 'b' "bounded-" boundDesc bound
+          , autoProverLinks 's' "all-"     allProve      0
           ]
         where
           boundDesc = text $ " with proof-depth bound " ++ show bound
           bound     = fromMaybe 5 $ apBound $ tiAutoProver ti
-
+          allProve  = text $ " for all lemmas "
+    autoProverLinks key "all-" nameSuffix bound = hsep
+      [ text (key : ".")
+      , linkToPath renderUrl
+            (AutoProverAllR tidx CutDFS bound (TheoryProof lemma proofPath))
+            ["autoprove-all"]
+            (keyword_ $ "autoprove")
+      , parens $
+          text (toUpper key : ".") <->
+          linkToPath renderUrl
+              (AutoProverAllR tidx CutNothing bound (TheoryProof lemma proofPath))
+              ["characterization-all"]
+              (keyword_ "for all solutions")
+      , nameSuffix
+      ]
     autoProverLinks key classPrefix nameSuffix bound = hsep
       [ text (key : ".")
       , linkToPath renderUrl
@@ -552,7 +573,8 @@ subProofSnippet renderUrl tidx ti lemma proofPath ctxt prf =
 
     nCases                  = show $ M.size $ children prf
     depth                   = length proofPath
-    ranking                 = useHeuristic (apHeuristic $ tiAutoProver ti) depth
+    heuristic               = selectHeuristic (tiAutoProver ti) ctxt
+    ranking                 = useHeuristic heuristic depth
     proofMethods            = rankProofMethods ranking ctxt
     subCases                = concatMap refSubCase $ M.toList $ children prf
     refSubCase (name, prf') =
@@ -585,7 +607,7 @@ subProofDiffSnippet renderUrl tidx ti s lemma proofPath ctxt prf =
         ] ++
         [ refDotDiffPath renderUrl tidx (DiffTheoryProof s lemma proofPath) False
         | nonEmptyGraph se ]
-        ++ 
+        ++
         [ preformatted (Just "sequent") (prettyNonGraphSystem se)
         , withTag "h3" [] (text $ nCases ++ " sub-case(s)")
         ] ++
@@ -599,11 +621,27 @@ subProofDiffSnippet renderUrl tidx ti s lemma proofPath ctxt prf =
           , preformatted (Just "methods") (numbered' $ map prettyPM $ zip [1..] pms)
           , autoProverLinks 'a' ""         emptyDoc      0
           , autoProverLinks 'b' "bounded-" boundDesc bound
+          , autoProverLinks 's' "all-"     allProve      0
           ]
         where
           boundDesc = text $ " with proof-depth bound " ++ show bound
           bound     = fromMaybe 5 $ apBound $ dtiAutoProver ti
+          allProve  = text $ " for all lemmas "
 
+    autoProverLinks key "all-" nameSuffix bound = hsep
+      [ text (key : ".")
+      , linkToPath renderUrl
+            (AutoProverAllDiffR tidx CutDFS bound)
+            ["autoprove-all"]
+            (keyword_ $ "autoprove")
+      , parens $
+          text (toUpper key : ".") <->
+          linkToPath renderUrl
+              (AutoProverAllDiffR tidx CutNothing bound)
+              ["characterization-all"]
+              (keyword_ "for all solutions")
+      , nameSuffix
+      ]
     autoProverLinks key classPrefix nameSuffix bound = hsep
       [ text (key : ".")
       , linkToPath renderUrl
@@ -627,7 +665,8 @@ subProofDiffSnippet renderUrl tidx ti s lemma proofPath ctxt prf =
 
     nCases                  = show $ M.size $ children prf
     depth                   = length proofPath
-    ranking                 = useHeuristic (apHeuristic $ dtiAutoProver ti) depth
+    heuristic               = selectHeuristic (dtiAutoProver ti) ctxt
+    ranking                 = useHeuristic heuristic depth
     proofMethods            = rankProofMethods ranking ctxt
     subCases                = concatMap refSubCase $ M.toList $ children prf
     refSubCase (name, prf') =
@@ -675,10 +714,12 @@ subDiffProofSnippet renderUrl tidx ti lemma proofPath ctxt prf =
           , preformatted (Just "methods") (numbered' $ map prettyPM $ zip [1..] pms)
           , autoProverLinks 'a' ""         emptyDoc      0
           , autoProverLinks 'b' "bounded-" boundDesc bound
+          , autoProverLinks 's' "all-"     allProve      0
           ]
         where
           boundDesc = text $ " with proof-depth bound " ++ show bound
           bound     = fromMaybe 5 $ apBound $ dtiAutoProver ti
+          allProve  = text $ " for all lemmas "
 
     mirrorSystem =
         if dpsMethod (root prf) == DiffMirrored
@@ -692,7 +733,20 @@ subDiffProofSnippet renderUrl tidx ti lemma proofPath ctxt prf =
                         [ text "" ]
                 else []
 
-
+    autoProverLinks key "all-" nameSuffix bound = hsep
+      [ text (key : ".")
+      , linkToPath renderUrl
+            (AutoProverAllDiffR tidx CutDFS bound)
+            ["autoprove-all"]
+            (keyword_ $ "autoprove")
+      , parens $
+          text (toUpper key : ".") <->
+          linkToPath renderUrl
+              (AutoProverAllDiffR tidx CutNothing bound)
+              ["characterization-all"]
+              (keyword_ "for all solutions")
+      , nameSuffix
+      ]
     autoProverLinks key classPrefix nameSuffix bound = hsep
       [ text (key : ".")
       , linkToPath renderUrl
@@ -716,7 +770,8 @@ subDiffProofSnippet renderUrl tidx ti lemma proofPath ctxt prf =
 
     nCases                  = show $ M.size $ children prf
     depth                   = length proofPath
-    ranking                 = useHeuristic (apHeuristic $ dtiAutoProver ti) depth
+    heuristic               = selectDiffHeuristic (dtiAutoProver ti) ctxt
+    ranking                 = useHeuristic heuristic depth
     diffProofMethods        = rankDiffProofMethods ranking ctxt
     subCases                = concatMap refSubCase $ M.toList $ children prf
     refSubCase (name, prf') =
@@ -772,15 +827,17 @@ htmlSourceDiff renderUrl tidx s kind d (j, th) =
       ]
     ppCase (i, (names, se)) =
       [ withTag "h3" [] $ fsep [ text "Source", int i, text "of", nCases
-                               , text " / named ", doubleQuotes (text name) ]
+                               , text " / named ", doubleQuotes (text name),
+                                 if isPartial then text "(partial deconstructions)" else text "" ]
       , refDotDiffPath renderUrl tidx (DiffTheorySource s kind d j i) False
       , withTag "p" [] $ ppPrem
       , wrapP $ prettyNonGraphSystem se
       ]
       where
         name = intercalate "_" names
+        isPartial = not $ null $ unsolvedChains se
 
-        
+
 -- | Build the Html document showing the source cases.
 reqCasesSnippet :: HtmlDocument d => RenderUrl -> TheoryIdx -> SourceKind -> ClosedTheory -> d
 reqCasesSnippet renderUrl tidx kind thy = vcat $
@@ -829,7 +886,7 @@ messageSnippet thy = vcat
 rulesDiffSnippet :: HtmlDocument d => ClosedDiffTheory -> d
 rulesDiffSnippet thy = vcat
     [ ppWithHeader "Multiset Rewriting Rules" $
-        vsep $ map prettyProtoRuleE msrRules
+        vsep $ map prettyDiffRule msrRules
     ]
   where
     msrRules   = diffTheoryDiffRules thy
@@ -860,7 +917,7 @@ rulesDiffSnippetSide s isdiff thy = vcat
               withTag "p"  [("class","monospace rules")] body             )
             body
 
-            
+
 -- | Build the Html document showing the message theory.
 messageDiffSnippet :: HtmlDocument d => Side -> Bool -> ClosedDiffTheory -> d
 messageDiffSnippet s isdiff thy = vcat
@@ -912,6 +969,7 @@ htmlThyPath renderUrl info path =
           Theory: #{get thyName $ tiTheory info}
           \ (Loaded at #{formatTime defaultTimeLocale "%T" $ tiTime info}
           \ from #{show $ tiOrigin info})
+          \ #{preEscapedToMarkup wfErrors}
         <div id="help">
           <h3>Quick introduction
           <noscript>
@@ -971,6 +1029,9 @@ htmlThyPath renderUrl info path =
                 \ stops after finding a solution, and
                 \ <span class="keys">A</span>
                 \ searches for all solutions.
+                \ Needs to have a #
+                <tt>sorry
+                \ selected to work.
             <tr>
               <td>
                 <span class="keys">b/B
@@ -981,12 +1042,21 @@ htmlThyPath renderUrl info path =
                 \ stops after finding a solution, and
                 \ <span class="keys">B</span>
                 \ searches for all solutions.
+                \ Needs to have a #
+                <tt>sorry
+                \ selected to work.
             <tr>
               <td>
                 <span class="keys">?
               <td>
                 Display this help message.
       |] renderUrl
+         where
+             wfErrors = case report of
+                             [] -> ""
+                             _  -> "<div class=\"wf-warning\">\nWARNING: the following wellformedness checks failed!<br /><br />\n" ++ (renderHtmlDoc . htmlDoc $ prettyWfErrorReport report) ++ "\n</div>"
+             report = checkWellformedness (removeTranslationItems (openTheory thy)) (get thySignature thy)
+                   ++ checkPreTransWellformedness (openTheory thy) -- FIXME: openTheory doesn't contain translated items, hence no warning is shown in the interactive mode
 
 -- | Render the item in the given theory given by the supplied path.
 htmlDiffThyPath :: RenderUrl    -- ^ The function for rendering Urls.
@@ -1035,6 +1105,7 @@ htmlDiffThyPath renderUrl info path =
           Theory: #{get diffThyName $ dtiTheory info}
           \ (Loaded at #{formatTime defaultTimeLocale "%T" $ dtiTime info}
           \ from #{show $ dtiOrigin info})
+          \ #{preEscapedToMarkup wfErrors}
         <div id="help">
           <h3>Quick introduction
           <noscript>
@@ -1094,6 +1165,9 @@ htmlDiffThyPath renderUrl info path =
                 \ stops after finding a solution, and
                 \ <span class="keys">A</span>
                 \ searches for all solutions.
+                \ Needs to have a #
+                <tt>sorry
+                \ selected to work.
             <tr>
               <td>
                 <span class="keys">b/B
@@ -1104,12 +1178,20 @@ htmlDiffThyPath renderUrl info path =
                 \ stops after finding a solution, and
                 \ <span class="keys">B</span>
                 \ searches for all solutions.
+                \ Needs to have a #
+                <tt>sorry
+                \ selected to work.
             <tr>
               <td>
                 <span class="keys">?
               <td>
                 Display this help message.
       |] renderUrl
+         where
+             wfErrors = case report of
+                             [] -> ""
+                             _  -> "<div class=\"wf-warning\">\nWARNING: the following wellformedness checks failed!<br /><br />\n" ++ (renderHtmlDoc . htmlDoc $ prettyWfErrorReport report) ++ "\n</div>"
+             report = checkWellformednessDiff (openDiffTheory thy) (get diffThySignature thy)
 
 
 
@@ -1132,7 +1214,7 @@ imgThyPath :: ImageFormat
            -> (String, FilePath)     -- ^ choice and command for rendering (dot or json)
            -> FilePath               -- ^ Tamarin's cache directory
            -> (System -> D.Dot ())
-           -> (String -> System -> String)     
+           -> (String -> System -> String)
                                      -- ^ to export contraint system to JSON
            -> String                 -- ^ Simplification level of graph (string representation of integer >= 0)
            -> Bool                   -- ^ True iff we want abbreviations
@@ -1144,7 +1226,7 @@ imgThyPath imgFormat (graphChoice, graphCommand) cacheDir_ compact showJsonGraph
     go (TheorySource k i j)   = case graphChoice of
                                   "json"  -> renderGraphCode "json" (casesJsonCode k i j)
                                   _       -> renderGraphCode "dot" (casesDotCode k i j)
-    go (TheoryProof l p)      = case graphChoice of 
+    go (TheoryProof l p)      = case graphChoice of
                                   "json"  -> renderGraphCode "json" (proofPathJsonCode l p)
                                   _       -> renderGraphCode "dot" (proofPathDotCode l p)
     go _                      = error "Unhandled theory path. This is a bug."
@@ -1168,8 +1250,8 @@ imgThyPath imgFormat (graphChoice, graphCommand) cacheDir_ compact showJsonGraph
         cases = map (getDisj . get cdCases) (getSource k thy)
 
    -- Get JSON code for required cases
-    casesJsonCode k i j = 
-        showJsonGraphFunct ("Theory: " ++ (get thyName thy) ++ " Case: " ++ show i ++ ":" ++ show j) 
+    casesJsonCode k i j =
+        showJsonGraphFunct ("Theory: " ++ (get thyName thy) ++ " Case: " ++ show i ++ ":" ++ show j)
         $ snd $ cases !! (i-1) !! (j-1)
       where
         cases = map (getDisj . get cdCases) (getSource k thy)
@@ -1189,7 +1271,7 @@ imgThyPath imgFormat (graphChoice, graphCommand) cacheDir_ compact showJsonGraph
         return $ showJsonGraphFunct ("Theory: " ++ (get thyName thy) ++ " Lemma: " ++ lemma) sequent
 
     -- Render a piece of dot or JSON code
-    renderGraphCode choice code = do   
+    renderGraphCode choice code = do
       let graphPath = cacheDir_ </> getGraphPath choice code
           imgPath = addExtension graphPath (show imgFormat)
 
@@ -1198,8 +1280,8 @@ imgThyPath imgFormat (graphChoice, graphCommand) cacheDir_ compact showJsonGraph
           renderedOrRendering n = do
               graphExists <- doesFileExist graphPath
               imgExists <- doesFileExist imgPath
-              if (n <= 0 || (graphExists && not imgExists))
-                  then do threadDelay 100             -- wait 10 ms
+              if (n > 0 && graphExists && not imgExists)
+                  then do threadDelay (10 * 1000) -- wait 10 ms
                           renderedOrRendering (n - 1)
                   else return imgExists
 
@@ -1255,7 +1337,7 @@ imgThyPath imgFormat (graphChoice, graphCommand) cacheDir_ compact showJsonGraph
       s <- m
       if s then return True else firstSuccess ms
 
-      
+
 -- | Render the image corresponding to the given theory path.
 imgDiffThyPath :: ImageFormat
            -> FilePath               -- ^ 'dot' command
@@ -1280,7 +1362,7 @@ imgDiffThyPath imgFormat dotCommand cacheDir_ compact simplificationLevel abbrev
         , "// protocol rules: "          ++ ruleList (getProtoRuleEsDiff LHS thy) -- FIXME RS: the rule names are the same on LHS and RHS, so we just pick LHS; should pass the current Side through to make this clean
         , "// message deduction rules: " ++ ruleList (getIntrVariantsDiff LHS thy) -- FIXME RS: the intruder rule names are the same on LHS and RHS; should pass the current Side through to make this clean
 --        , "// message deduction rules: " ++ ruleList ((intruderRules . get (_crcRules . diffThyCacheLeft)) thy) -- FIXME RS: again, we arbitrarily pick the LHS version of the cache, should be the same on both sides
---intruderRules . L.get (crcRules . diffThyCacheLeft) 
+--intruderRules . L.get (crcRules . diffThyCacheLeft)
         , "// abbreviate: "              ++ show abbreviate
         , D.showDot dot
         ]
@@ -1314,8 +1396,8 @@ imgDiffThyPath imgFormat dotCommand cacheDir_ compact simplificationLevel abbrev
             let isSolved s sys' = (rankProofMethods GoalNrRanking (eitherProofContext ctxt s) sys') == [] -- checks if the system is solved
             nsequent <- get dsSystem diffSequent
             -- Here we can potentially get Nothing if there is no mirror DG
-            sequentList <- snd <$> getMirrorDGandEvaluateRestrictions ctxt diffSequent (isSolved side nsequent)
-            if null sequentList then Nothing else return $ compact $ head sequentList  
+            let sequentList = snd $ getMirrorDGandEvaluateRestrictions ctxt diffSequent (isSolved side nsequent)
+            if null sequentList then Nothing else return $ compact $ head sequentList
           else do
             sequent <- get dsSystem diffSequent
             return $ compact sequent
@@ -1330,8 +1412,8 @@ imgDiffThyPath imgFormat dotCommand cacheDir_ compact simplificationLevel abbrev
           renderedOrRendering n = do
               dotExists <- doesFileExist dotPath
               imgExists <- doesFileExist imgPath
-              if (n <= 0 || (dotExists && not imgExists))
-                  then do threadDelay 100             -- wait 10 ms
+              if (n > 0 && dotExists && not imgExists)
+                  then do threadDelay (10 * 1000) -- wait 10 ms
                           renderedOrRendering (n - 1)
                   else return imgExists
 
@@ -1371,7 +1453,7 @@ imgDiffThyPath imgFormat dotCommand cacheDir_ compact simplificationLevel abbrev
       s <- m
       if s then return True else firstSuccess ms
 
-      
+
 -- | Get title to display for a given proof path.
 titleThyPath :: ClosedTheory -> TheoryPath -> String
 titleThyPath thy path = go path
@@ -1426,7 +1508,7 @@ titleDiffThyPath thy path = go path
         Nothing -> "None"
         Just proof -> renderHtmlDoc $ prettyDiffProofMethod $ dpsMethod $ root proof
 
-        
+
 -- | Resolve a proof path.
 resolveProofPath :: ClosedTheory            -- ^ Theory to resolve in
                  -> String                  -- ^ Name of lemma
@@ -1455,7 +1537,7 @@ resolveProofPathDiffLemma thy lemmaName path = do
   lemma <- lookupDiffLemma lemmaName thy
   get lDiffProof lemma `atPathDiff` path
 
-  
+
 ------------------------------------------------------------------------------
 -- Moving to next/prev proof path
 ------------------------------------------------------------------------------
@@ -1622,7 +1704,7 @@ prevDiffThyPath thy = go
     go path@(DiffTheoryDiffMethod _ _ _)       = path
 
     lemmas s = map (\l -> (get lName l, l)) $ diffTheorySideLemmas s thy
-    
+
     diffLemmas = map (\l -> (get lDiffName l, l)) $ diffTheoryDiffLemmas thy
 
     getPrevPath s lemmaName path = do
@@ -1646,11 +1728,11 @@ prevDiffThyPath thy = go
     getPrevDiffLemma lemmaName = getPrevElement (== lemmaName) (map fst (diffLemmas))
 
     lastLemmaLHS = case lemmas LHS of
-                  [] -> DiffTheorySource RHS RefinedSource True 0 0 
+                  [] -> DiffTheorySource RHS RefinedSource True 0 0
                   l  -> DiffTheoryProof LHS (fst (last l)) (lastPath LHS (fst (last l)))
 
     lastLemmaRHS = case lemmas RHS of
-                  [] -> lastLemmaLHS 
+                  [] -> lastLemmaLHS
                   l  -> DiffTheoryProof RHS (fst (last l)) (lastPath RHS (fst (last l)))
 
 -- | Interesting proof methods that are not skipped by next/prev-smart.
@@ -1845,7 +1927,7 @@ prevSmartDiffThyPath thy = go
     go path@(DiffTheoryDiffMethod _ _ _)              = path
 
     lemmas s = map (\l -> (get lName l, l)) $ diffTheorySideLemmas s thy
-    
+
     diffLemmas = map (\l -> (get lDiffName l, l)) $ diffTheoryDiffLemmas thy
 
     {-
@@ -1882,11 +1964,11 @@ prevSmartDiffThyPath thy = go
     getPrevDiffLemma lemmaName = getPrevElement (== lemmaName) (map fst (diffLemmas))
 
     lastLemmaLHS = case lemmas LHS of
-      [] -> DiffTheorySource RHS RefinedSource True 0 0 
+      [] -> DiffTheorySource RHS RefinedSource True 0 0
       l  -> DiffTheoryProof LHS (fst (last l)) (lastPath LHS (fst (last l)))
 
     lastLemmaRHS = case lemmas RHS of
-      [] -> lastLemmaLHS 
+      [] -> lastLemmaLHS
       l  -> DiffTheoryProof RHS (fst (last l)) (lastPath RHS (fst (last l)))
 
 -- | Extract proof paths out of a proof.

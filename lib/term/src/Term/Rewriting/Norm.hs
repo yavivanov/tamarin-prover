@@ -65,18 +65,23 @@ nfViaHaskell t0 = reader $ \hnd -> check hnd
             FPair t1 t2                                     -> go t1 && go t2
             FDiff t1 t2                                     -> go t1 && go t2
             One                                             -> True
+            DHNeutral                                       -> True
+            Zero                                            -> True
             Lit2 _                                          -> True
             -- subterm rules
             FAppNoEq _ _ | setAny (struleApplicable t) strules -> False
             -- exponentiation
             FExp (viewTerm2 -> FExp _ _) _                  -> False
             FExp _                       (viewTerm2 -> One) -> False
+            FExp (viewTerm2 -> DHNeutral) _                -> False
             -- inverses
             FInv (viewTerm2 -> FInv _)                      -> False
             FInv (viewTerm2 -> FMult ts) | any isInverse ts -> False
             FInv (viewTerm2 -> One)                         -> False
             -- multiplication
-            FMult ts | fAppOne `elem` ts  || any isProduct ts || invalidMult ts   -> False
+            FMult ts | fAppOne `elem` ts || fAppDHNeutral `elem` ts  || any isProduct ts || invalidMult ts   -> False
+            -- xor
+            FXor ts | fAppZero `elem` ts  || any isXor ts || invalidXor ts   -> False
             -- point multiplication
             FPMult _                  (viewTerm2 -> FPMult _ _) -> False
             FPMult (viewTerm2 -> One) _                         -> False
@@ -90,6 +95,7 @@ nfViaHaskell t0 = reader $ \hnd -> check hnd
             FEMap      t1 t2 -> go t1 && go t2
             FInv       t1    -> go t1
             FMult      ts    -> all go ts
+            FXor       ts    -> all go ts
             FUnion     ts    -> all go ts
             FAppNoEq _ ts    -> all go ts
             FAppC _    ts    -> all go ts
@@ -109,6 +115,11 @@ nfViaHaskell t0 = reader $ \hnd -> check hnd
             ([ viewTerm2 -> FInv t ], factors) -> t `elem` factors
             (_:_:_, _) -> True
             _          -> False
+
+        invalidXor ts = go' ts []
+            where
+                go' []     _ = False
+                go' (x:xs) y = (length (elemIndices x (xs++y))) > 0 || go' xs (x:y)
 
         msig        = mhMaudeSig hnd
         strules     = stRules msig

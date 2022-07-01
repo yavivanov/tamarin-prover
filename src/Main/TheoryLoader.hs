@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BlockArguments #-}
 -- |
 -- Copyright   : (c) 2010, 2011 Benedikt Schmidt & Simon Meier
 -- License     : GPL v3 (see LICENSE)
@@ -14,11 +15,18 @@ module Main.TheoryLoader (
 
   -- ** Loading open theories
   , loadOpenThy
+  , loadOpenTranslatedThy
+  , loadOpenAndTranslatedThy
 
   -- ** Loading and closing theories
+  , closeThy
   , loadClosedThy
+  , loadClosedThyWf
   , loadClosedThyWfReport
   , loadClosedThyString
+  , reportOnClosedThyStringWellformedness
+  , reportWellformednessDoc
+
 
   -- ** Loading open diff theories
   , loadOpenDiffThy
@@ -27,8 +35,9 @@ module Main.TheoryLoader (
   , loadClosedDiffThy
   , loadClosedDiffThyWfReport
   , loadClosedDiffThyString
+  , reportOnClosedDiffThyStringWellformedness
 
-  
+
   -- ** Constructing automatic provers
   , constructAutoProver
   , constructAutoDiffProver
@@ -38,21 +47,26 @@ module Main.TheoryLoader (
   , bpIntruderVariantsFile
   , addMessageDeductionRuleVariants
 
+  , lemmaSelector
   ) where
 
 -- import           Debug.Trace
-  
+
 import           Prelude                             hiding (id, (.))
+
+import           Accountability                      as Acc
+import           Accountability.Generation      
 
 import           Data.Char                           (toLower)
 import           Data.Label
-import           Data.List                           (isPrefixOf)
+import           Data.List                           (isPrefixOf,intersperse)
+import           Data.Map                            (keys)
 -- import           Data.Monoid
 import           Data.FileEmbed                      (embedFile)
 
 -- import           Control.Basics
+
 import           Control.Category
-import           Control.DeepSeq                     (rnf)
 
 import           System.Console.CmdArgs.Explicit
 
@@ -61,14 +75,18 @@ import           Theory.Text.Parser                  (parseIntruderRules, parseO
 import           Theory.Text.Pretty                  hiding (mode)
 import           Theory.Tools.AbstractInterpretation (EvaluationStyle(..))
 import           Theory.Tools.IntruderRules          (specialIntruderRules, subtermIntruderRules
-                                                     , multisetIntruderRules)
+                                                     , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
+import           Sapic
+import           Main.Console                        (renderDoc, argExists, findArg, addEmptyArg, updateArg, Arguments, getOutputModule, ArgKey, ArgVal)
 
-import           Main.Console
 import           Main.Environment
 
 import           Debug.Trace
 
+import           Text.Parsec                hiding ((<|>),try)
+import           Safe
+import qualified Theory.Text.Pretty as Pretty
 
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
@@ -77,17 +95,21 @@ import           Debug.Trace
 -- | Flags for loading a theory (either command line or from a configuration).
 theoryConfFlags :: [Flag Arguments]
 theoryConfFlags =
-  [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX"
-      "Attempt to prove a lemma "
+  [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
+      "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
 
-  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|NONE"
+  , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
+      "Select lemma(s) by name or prefx (can be repeated)"
+
+  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
       "How to search for traces (default DFS)"
 
   , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
       "Bound the depth of the proofs"
 
-  , flagOpt "s" ["heuristic"] (updateArg "heuristic") "(s|S|o|p|P|l|c|C|i)+"
-      "Sequence of goal rankings to use (default 's')"
+  , flagOpt (prettyGoalRanking $ head $ defaultRankings False)
+      ["heuristic"] (updateArg "heuristic") ("(" ++ intersperse '|' (keys goalRankingIdentifiers) ++ ")+")
+      ("Sequence of goal rankings to use (default '" ++ prettyGoalRanking (head $ defaultRankings False) ++ "')")
 
   , flagOpt "summary" ["partial-evaluation"] (updateArg "partialEvaluation")
       "SUMMARY|VERBOSE"
@@ -100,12 +122,20 @@ theoryLoadFlags :: [Flag Arguments]
 theoryLoadFlags = theoryConfFlags ++
   [ flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
       "Define flags for pseudo-preprocessor."
+  , flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
+      "Define flags for pseudo-preprocessor"
 
   , flagNone ["diff"] (addEmptyArg "diff")
-      "Turn on observational equivalence mode using diff terms."
+      "Turn on observational equivalence mode using diff terms"
 
   , flagNone ["quit-on-warning"] (addEmptyArg "quit-on-warning")
-      "Strict mode that quits on any warning that is emitted."
+      "Strict mode that quits on any warning that is emitted"
+
+  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
+      "Try to auto-generate sources lemmas"
+
+  , flagOpt (oraclePath defaultOracle) ["oraclename"] (updateArg "oraclename") "FILE"
+      ("Path to the oracle heuristic (default '" ++ oraclePath defaultOracle ++ "')")
 
 --  , flagOpt "" ["diff"] (updateArg "diff") "OFF|ON"
 --      "Turn on observational equivalence (default OFF)."
@@ -117,15 +147,51 @@ defines = findArg "defines"
 
 -- | Diff flag in the argument
 diff :: Arguments -> [String]
-diff as = if (argExists "diff" as) then ["diff"] else []
+diff as = if argExists "diff" as then ["diff"] else []
 
 -- | quit-on-warning flag in the argument
 quitOnWarning :: Arguments -> [String]
-quitOnWarning as = if (argExists "quit-on-warning" as) then ["quit-on-warning"] else []
+quitOnWarning as = if argExists "quit-on-warning" as then ["quit-on-warning"] else []
 
--- | Load an open theory from a file.
-loadOpenDiffThy :: Arguments -> FilePath -> IO OpenDiffTheory
-loadOpenDiffThy as fp = parseOpenDiffTheory (diff as ++ defines as ++ quitOnWarning as) fp
+hasQuitOnWarning :: Arguments -> Bool
+hasQuitOnWarning as = "quit-on-warning" `elem` quitOnWarning as
+
+lemmaSelectorByModule :: Arguments -> ProtoLemma f p -> Bool
+lemmaSelectorByModule as lem = case lemmaModules of
+    [] -> True -- default to true if no modules (or only empty ones) are set
+    _  -> getOutputModule as `elem` lemmaModules
+    where
+        lemmaModules = concat [ m | LemmaModule m <- get lAttributes lem]
+
+-- | Select lemmas for proving
+lemmaSelector :: Arguments -> Lemma p -> Bool
+lemmaSelector as lem
+  | null lemmaNames = True
+  | lemmaNames == [""] = True
+  | lemmaNames == ["",""] = True
+  | otherwise = any lemmaMatches lemmaNames
+  where
+      lemmaNames :: [String]
+      lemmaNames = findArg "prove" as ++ findArg "lemma" as
+
+      lemmaMatches :: String -> Bool
+      lemmaMatches pattern
+        | lastMay pattern == Just '*' = init pattern `isPrefixOf` get lName lem
+        | otherwise = get lName lem == pattern
+
+-- | Select diffLemmas for proving
+diffLemmaSelector :: Arguments -> DiffLemma p -> Bool
+diffLemmaSelector as lem
+  | lemmaNames == [""] = True
+  | otherwise = any lemmaMatches lemmaNames
+  where
+      lemmaNames :: [String]
+      lemmaNames = (findArg "prove" as) ++ (findArg "lemma" as)
+
+      lemmaMatches :: String -> Bool
+      lemmaMatches pattern
+        | lastMay pattern == Just '*' = init pattern `isPrefixOf` get lDiffName lem
+        | otherwise = get lDiffName lem == pattern
 
 -- | Update command line arguments with arguments taken from the file
 updateArguments :: Arguments -> String -> Arguments
@@ -143,67 +209,119 @@ loadOpenThy as inFile = do
     (thy, argString) <- parseOpenTheory (diff as ++ defines as ++ quitOnWarning as) inFile
     return (thy, (updateArguments as argString))
 
--- | Load a closed theory.
+-- | Load an open theory from a file. Returns the open translated theory.
+loadOpenTranslatedThy :: Arguments -> FilePath -> IO (OpenTranslatedTheory, Arguments)
+loadOpenTranslatedThy as inFile =  do
+    (thy, as) <- loadOpenThy as inFile
+    thy' <- Sapic.translate thy
+    thy'' <- Acc.translate thy'
+    return (removeTranslationItems thy'', as)
+
+-- | Load an open theory from a file. Returns the open and the translated theory.
+loadOpenAndTranslatedThy :: Arguments -> FilePath -> IO (OpenTheory, OpenTranslatedTheory, Arguments)
+loadOpenAndTranslatedThy as inFile =  do
+    thy <- loadOpenThy as inFile
+    transThy <- 
+      Sapic.typeTheory (fst thy)
+      >>= Sapic.translate
+      >>= Acc.translate
+    return (fst thy, removeTranslationItems transThy, snd thy)
+
+-- | Load a closed theory from a file.
+loadClosedThy :: Arguments -> FilePath -> IO ClosedTheory
+loadClosedThy as inFile = do
+  (openThy, transThy, as') <- loadOpenAndTranslatedThy as inFile
+  closeThy as' openThy transThy
+
+-- | Load an open diff theory from a file.
+loadOpenDiffThy :: Arguments -> FilePath -> IO OpenDiffTheory
+loadOpenDiffThy as = parseOpenDiffTheory (diff as ++ defines as ++ quitOnWarning as)
+
+-- | Load a closed diff theory from a file.
 loadClosedDiffThy :: Arguments -> FilePath -> IO ClosedDiffTheory
 loadClosedDiffThy as inFile = do
   thy0 <- loadOpenDiffThy as inFile
   thy1 <- addMessageDeductionRuleVariantsDiff thy0
   closeDiffThy as thy1
 
--- | Load a closed theory.
-loadClosedThy :: Arguments -> FilePath -> IO ClosedTheory
-loadClosedThy as inFile = do -- liftM fst (loadOpenThy as inFile) >>= closeThy as
-    (thy, as') <- loadOpenThy as inFile
-    closeThy as' thy
+reportWellformednessDoc :: WfErrorReport  -> Pretty.Doc
+reportWellformednessDoc [] =  Pretty.emptyDoc
+reportWellformednessDoc errs  = Pretty.vcat 
+                          [ Pretty.text $ "WARNING: " ++ show (length errs)
+                                                      ++ " wellformedness check failed!"
+                          , Pretty.text "         The analysis results might be wrong!"
+                          , prettyWfErrorReport errs
+                          ]
 
--- | Load a close theory and report on well-formedness errors.
-loadClosedThyWfReport :: Arguments -> FilePath -> IO ClosedTheory
-loadClosedThyWfReport as inFile = do
-    (thy, as') <- loadOpenThy as inFile
-    -- report
-    case checkWellformedness thy of
-      []     -> return ()
-      report -> do
+-- | Report well-formedness errors unless empty. Quit on warning. Start with prefix `prefixAct`
+reportWellformedness :: IO a -> Bool -> WfErrorReport -> IO ()
+reportWellformedness _          _            []       = return ()
+reportWellformedness prefixAct quit           wfreport =
+   do
+      _ <- prefixAct -- optional: printout of file name or similar
+      putStrLn "WARNING: ignoring the following wellformedness errors"
+      putStrLn ""
+      putStrLn $ renderDoc $ prettyWfErrorReport wfreport
+      putStrLn $ replicate 78 '-'
+      if quit then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+
+-- | helper function: print header with theory filename 
+printFileName :: [Char] -> IO ()
+printFileName inFile = do
           putStrLn ""
           putStrLn $ replicate 78 '-'
           putStrLn $ "Theory file '" ++ inFile ++ "'"
           putStrLn $ replicate 78 '-'
           putStrLn ""
-          putStrLn $ "WARNING: ignoring the following wellformedness errors"
-          putStrLn ""
-          putStrLn $ renderDoc $ prettyWfErrorReport report
-          putStrLn $ replicate 78 '-'
-          if elem "quit-on-warning" (quitOnWarning as') then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+
+loadClosedThyWf :: Arguments -> FilePath -> IO (ClosedTheory, Pretty.Doc)
+loadClosedThyWf as inFile = do
+    (openThy, transThy0, as') <- loadOpenAndTranslatedThy as inFile
+    transThy <- addMessageDeductionRuleVariants transThy0
+    sig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy
+    -- report
+    let errors = checkWellformedness transThy sig ++ Sapic.checkWellformednessSapic openThy
+    let report = reportWellformednessDoc errors
     -- return closed theory
-    closeThy as' thy
+    closedTheory <- closeThyWithMaude sig as' openThy transThy
+    return (closedTheory, report)
+
+-- | Load a closed theory and report on well-formedness errors.
+loadClosedThyWfReport :: Arguments -> FilePath -> IO ClosedTheory
+loadClosedThyWfReport as inFile = do
+    (openThy, transThy0, as') <- loadOpenAndTranslatedThy as inFile
+    transThy <- addMessageDeductionRuleVariants transThy0
+    transSig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy
+    -- report
+    let prefix = printFileName inFile
+    let errors = checkWellformedness transThy transSig ++ Sapic.checkWellformednessSapic openThy
+    reportWellformedness prefix (hasQuitOnWarning as) errors
+    -- return closed theory
+    closeThyWithMaude transSig as' openThy transThy
 
 -- | Load a closed diff theory and report on well-formedness errors.
 loadClosedDiffThyWfReport :: Arguments -> FilePath -> IO ClosedDiffTheory
 loadClosedDiffThyWfReport as inFile = do
     thy0 <- loadOpenDiffThy as inFile
     thy1 <- addMessageDeductionRuleVariantsDiff thy0
+    sig <- toSignatureWithMaude (maudePath as) $ get diffThySignature thy1
     -- report
-    case checkWellformednessDiff thy1 of
-      []     -> return ()
-      report -> do
-          putStrLn ""
-          putStrLn $ replicate 78 '-'
-          putStrLn $ "Theory file '" ++ inFile ++ "'"
-          putStrLn $ replicate 78 '-'
-          putStrLn ""
-          putStrLn $ "WARNING: ignoring the following wellformedness errors"
-          putStrLn ""
-          putStrLn $ renderDoc $ prettyWfErrorReport report
-          putStrLn $ replicate 78 '-'
-          if elem "quit-on-warning" (quitOnWarning as) then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+    let prefix = printFileName inFile
+    let errors = checkWellformednessDiff thy1 sig
+    reportWellformedness prefix (hasQuitOnWarning as) errors
     -- return closed theory
-    closeDiffThy as thy1
+    closeDiffThyWithMaude sig as thy1
 
 loadClosedThyString :: Arguments -> String -> IO (Either String ClosedTheory)
 loadClosedThyString as input =
     case parseOpenTheoryString (defines as) input of
-        Left err               -> return $ Left $ "parse error: " ++ show err
-        Right (thy, argString) -> fmap Right $ closeThy (updateArguments as argString) thy
+        Left err  -> return $ Left $ "parse error: " ++ show err
+        Right (thy, argString) -> do
+            thy' <-  Sapic.typeTheory thy
+                  >>= Sapic.translate
+                  >>= Acc.translate
+            Right <$> closeThy (updateArguments as argString) thy (removeTranslationItems thy') -- No "return" because closeThy gives IO (ClosedTheory)
+
 
 loadClosedDiffThyString :: Arguments -> String -> IO (Either String ClosedDiffTheory)
 loadClosedDiffThyString as input =
@@ -212,60 +330,111 @@ loadClosedDiffThyString as input =
         Right thy -> fmap Right $ do
           thy1 <- addMessageDeductionRuleVariantsDiff thy
           closeDiffThy as thy1
-             
+
+-- | Load an open theory from a string.
+loadOpenThyString :: Arguments -> String -> Either ParseError (OpenTheory, String)
+loadOpenThyString as = parseOpenTheoryString (diff as ++ defines as ++ quitOnWarning as)
+
+-- | Load an open theory from a string.
+loadOpenDiffThyString :: Arguments -> String -> Either ParseError OpenDiffTheory
+loadOpenDiffThyString as = parseOpenDiffTheoryString (diff as ++ defines as ++ quitOnWarning as)
+
+-- | Load a close theory and only report on well-formedness errors or translation errors
+reportOnClosedThyStringWellformedness :: Arguments -> String -> IO String
+reportOnClosedThyStringWellformedness as input =
+    case loadOpenThyString as input of
+      Left  err   -> return $ "parse error: " ++ show err
+      Right (openThy, as') -> do
+            transThy <- Sapic.typeTheory openThy
+                  >>= Sapic.translate
+                  >>= Acc.translate
+            transSig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy
+            -- report
+            let errors = checkWellformedness (removeTranslationItems transThy) transSig 
+                      ++ Sapic.checkWellformednessSapic openThy
+                      ++ checkPreTransWellformedness openThy
+            case errors of 
+                  []     -> return ""
+                  report -> do
+                    if elem "quit-on-warning" (quitOnWarning as) then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+                    return $ " WARNING: ignoring the following wellformedness errors: " ++(renderDoc $ prettyWfErrorReport report)
+
+-- | Load a closed diff theory and report on well-formedness errors.
+reportOnClosedDiffThyStringWellformedness :: Arguments -> String -> IO String
+reportOnClosedDiffThyStringWellformedness as input = do
+    case loadOpenDiffThyString as input of
+      Left  err   -> return $ "parse error: " ++ show err
+      Right thy0 -> do
+        thy1 <- addMessageDeductionRuleVariantsDiff thy0
+        sig <- toSignatureWithMaude (maudePath as) $ get diffThySignature thy1
+        -- report
+        case checkWellformednessDiff thy1 sig of
+          []     -> return ""
+          report -> do
+            if elem "quit-on-warning" (quitOnWarning as) then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+            return $ " WARNING: ignoring the following wellformedness errors: " ++(renderDoc $ prettyWfErrorReport report)
+
 -- | Close a theory according to arguments.
-closeThy :: Arguments -> OpenTheory -> IO ClosedTheory
-closeThy as thy0 = do
-  thy1 <- addMessageDeductionRuleVariants thy0
+closeThy :: Arguments -> OpenTheory -> OpenTranslatedTheory -> IO ClosedTheory
+closeThy as openThy transThy = do
+  transThy' <- addMessageDeductionRuleVariants transThy
+  sig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy'
+  closeThyWithMaude sig as openThy transThy'
+
+-- | Close a theory according to arguments.
+closeThyWithMaude :: SignatureWithMaude -> Arguments -> OpenTheory -> OpenTranslatedTheory -> IO ClosedTheory
+closeThyWithMaude sig as openThy transThy = do
   -- FIXME: wf-check is at the wrong position here. Needs to be more
   -- fine-grained.
-  let thy2 = wfCheck thy1
+  let transThy' = wfCheck openThy transThy
   -- close and prove
-  cthy <- closeTheory (maudePath as) thy2
-  return $ proveTheory lemmaSelector prover $ partialEvaluation cthy
+  let closedThy = closeTheoryWithMaude sig transThy' (argExists "auto-sources" as)
+  return $ proveTheory (lemmaSelectorByModule as &&& lemmaSelector as) prover $ partialEvaluation closedThy
     where
       -- apply partial application
       ----------------------------
       partialEvaluation = case map toLower <$> findArg "partialEvaluation" as of
-        Just "verbose" -> applyPartialEvaluation Tracing
-        Just _         -> applyPartialEvaluation Summary
+        Just "verbose" -> applyPartialEvaluation Tracing (argExists "auto-sources" as)
+        Just _         -> applyPartialEvaluation Summary (argExists "auto-sources" as)
         _              -> id
 
       -- wellformedness check
       -----------------------
-      wfCheck :: OpenTheory -> OpenTheory
-      wfCheck thy =
+      wfCheck :: OpenTheory -> OpenTranslatedTheory -> OpenTranslatedTheory
+      wfCheck othy tthy =
         noteWellformedness
-          (checkWellformedness thy) thy (elem "quit-on-warning" (quitOnWarning as))
-
-      lemmaSelector :: Lemma p -> Bool
-      lemmaSelector lem =
-          any (`isPrefixOf` get lName lem) lemmaNames
-        where
-          lemmaNames :: [String]
-          lemmaNames = findArg "prove" as
+          (checkWellformedness tthy sig ++ checkPreTransWellformedness othy) transThy (elem "quit-on-warning" (quitOnWarning as))
 
       -- replace all annotated sorrys with the configured autoprover.
       prover :: Prover
       prover | argExists "prove" as =
                   replaceSorryProver $ runAutoProver $ constructAutoProver as
              | otherwise            = mempty
-             
+
 -- | Close a diff theory according to arguments.
 closeDiffThy :: Arguments -> OpenDiffTheory -> IO ClosedDiffTheory
 closeDiffThy as thy0 = do
+  sig <- toSignatureWithMaude (maudePath as) $ get diffThySignature thy0
+  closeDiffThyWithMaude sig as thy0
+
+(&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
+(&&&) f g x = f x && g x
+
+-- | Close a diff theory according to arguments.
+closeDiffThyWithMaude :: SignatureWithMaude -> Arguments -> OpenDiffTheory -> IO ClosedDiffTheory
+closeDiffThyWithMaude sig as thy0 = do
   -- FIXME: wf-check is at the wrong position here. Needs to be more
   -- fine-grained.
   let thy2 = wfCheckDiff thy0
   -- close and prove
-  cthy <- closeDiffTheory (maudePath as) (addDefaultDiffLemma (addProtoRuleLabels thy2))
-  return $ proveDiffTheory lemmaSelector diffLemmaSelector prover diffprover $ partialEvaluation cthy
+  let cthy = closeDiffTheoryWithMaude sig (addDefaultDiffLemma thy2) (argExists "auto-sources" as)
+  return $ proveDiffTheory (lemmaSelectorByModule as &&& lemmaSelector as) (diffLemmaSelector as) prover diffprover $ partialEvaluation cthy
     where
       -- apply partial application
       ----------------------------
       partialEvaluation = case map toLower <$> findArg "partialEvaluation" as of
-        Just "verbose" -> applyPartialEvaluationDiff Tracing
-        Just _         -> applyPartialEvaluationDiff Summary
+        Just "verbose" -> applyPartialEvaluationDiff Tracing (argExists "auto-sources" as)
+        Just _         -> applyPartialEvaluationDiff Summary (argExists "auto-sources" as)
         _              -> id
 
       -- wellformedness check
@@ -273,21 +442,7 @@ closeDiffThy as thy0 = do
       wfCheckDiff :: OpenDiffTheory -> OpenDiffTheory
       wfCheckDiff thy =
         noteWellformednessDiff
-          (checkWellformednessDiff thy) thy (elem "quit-on-warning" (quitOnWarning as))
-
-      lemmaSelector :: Lemma p -> Bool
-      lemmaSelector lem =
-          any (`isPrefixOf` get lName lem) lemmaNames
-        where
-          lemmaNames :: [String]
-          lemmaNames = findArg "prove" as
-
-      diffLemmaSelector :: DiffLemma p -> Bool
-      diffLemmaSelector lem =
-          any (`isPrefixOf` get lDiffName lem) lemmaNames
-        where
-          lemmaNames :: [String]
-          lemmaNames = findArg "prove" as
+          (checkWellformednessDiff thy sig) thy ("quit-on-warning" `elem` quitOnWarning as)
 
       -- diff prover: replace all annotated sorrys with the configured autoprover.
       diffprover :: DiffProver
@@ -300,89 +455,54 @@ closeDiffThy as thy0 = do
       prover | argExists "prove" as =
                   replaceSorryProver $ runAutoProver $ constructAutoProver as
              | otherwise            = mempty
-             
+
 -- | Construct an 'AutoProver' from the given arguments (--bound,
 -- --stop-on-trace).
 constructAutoProver :: Arguments -> AutoProver
 constructAutoProver as =
-    -- force error early
-    (rnf rankings) `seq`
-    AutoProver (roundRobinHeuristic rankings) proofBound stopOnTrace
+    AutoProver heuristic proofBound stopOnTrace
   where
     -- handles to relevant arguments
     --------------------------------
     proofBound      = read <$> findArg "bound" as
 
-    rankings = case findArg "heuristic" as of
-        Just (rawRankings@(_:_)) -> map ranking rawRankings
-        Just []                  -> error "--heuristic: at least one ranking must be given"
-        _                        -> [SmartRanking False]
-
-    ranking 's' = SmartRanking False
-    ranking 'S' = SmartRanking True
-    ranking 'o' = OracleRanking
-    ranking 'p' = SapicRanking
-    ranking 'l' = SapicLivenessRanking
-    ranking 'P' = SapicPKCS11Ranking
-    ranking 'c' = UsefulGoalNrRanking
-    ranking 'C' = GoalNrRanking
-    ranking 'i' = InjRanking
-    ranking r   = error $ render $ fsep $ map text $ words $
-      "Unknown goal ranking '" ++ [r] ++ "'. Use one of the following:\
-      \ 's' for the smart ranking without loop breakers,\
-      \ 'S' for the smart ranking with loop breakers,\
-      \ 'o' for oracle ranking,\
-      \ 'p' for the smart ranking optimized for translations coming from SAPIC (http://sapic.gforge.inria.fr),\
-      \ 'l' for the smart ranking optimized for translations coming from SAPIC proving liveness properties,\
-      \ 'P' for the smart ranking optimized for a specific model of PKCS11, translated using SAPIC,\
-      \ 'i' for the smart ranking modified for the proof of injective detection protocols,\
-      \ 'c' for the creation order and useful goals first,\
-      \ and 'C' for the creation order."
+    heuristic = case findArg "heuristic" as of
+        Just rawRankings@(_:_) -> Just $ roundRobinHeuristic
+                                       $ map (mapOracleRanking (maybeSetOracleRelPath (findArg "oraclename" as)) . charToGoalRanking) rawRankings
+        Just []                -> error "--heuristic: at least one ranking must be given"
+        _                      -> Nothing
 
     stopOnTrace = case (map toLower) <$> findArg "stopOnTrace" as of
-      Nothing     -> CutDFS
-      Just "dfs"  -> CutDFS
-      Just "none" -> CutNothing
-      Just "bfs"  -> CutBFS
-      Just other  -> error $ "unknown stop-on-trace method: " ++ other
+      Nothing       -> CutDFS
+      Just "dfs"    -> CutDFS
+      Just "none"   -> CutNothing
+      Just "bfs"    -> CutBFS
+      Just "seqdfs" -> CutSingleThreadDFS
+      Just other    -> error $ "unknown stop-on-trace method: " ++ other
 
 -- | Construct an 'AutoProver' from the given arguments (--bound,
 -- --stop-on-trace).
 constructAutoDiffProver :: Arguments -> AutoProver
 constructAutoDiffProver as =
-    -- FIXME!
-    -- force error early
-    (rnf rankings) `seq`
-    AutoProver (roundRobinHeuristic rankings) proofBound stopOnTrace
+    AutoProver heuristic proofBound stopOnTrace
   where
     -- handles to relevant arguments
     --------------------------------
     proofBound      = read <$> findArg "bound" as
 
-    rankings = case findArg "heuristic" as of
-        Just (rawRankings@(_:_)) -> map ranking rawRankings
-        Just []                  -> error "--heuristic: at least one ranking must be given"
-        _                        -> [SmartDiffRanking]
-
-    ranking 's' = SmartRanking False
-    ranking 'S' = SmartRanking True
-    ranking 'o' = OracleRanking
-    ranking 'c' = UsefulGoalNrRanking
-    ranking 'C' = GoalNrRanking
-    ranking r   = error $ render $ fsep $ map text $ words $
-      "Unknown goal ranking '" ++ [r] ++ "'. Use one of the following:\
-      \ 's' for the smart ranking without loop breakers,\
-      \ 'S' for the smart ranking with loop breakers,\
-      \ 'o' for oracle ranking,\
-      \ 'c' for the creation order and useful goals first,\
-      \ and 'C' for the creation order."
+    heuristic = case findArg "heuristic" as of
+        Just rawRankings@(_:_) -> Just $ roundRobinHeuristic
+                                       $ map (mapOracleRanking (maybeSetOracleRelPath (findArg "oraclename" as)) . charToGoalRankingDiff) rawRankings
+        Just []                -> error "--heuristic: at least one ranking must be given"
+        _                      -> Nothing
 
     stopOnTrace = case (map toLower) <$> findArg "stopOnTrace" as of
-      Nothing     -> CutDFS
-      Just "dfs"  -> CutDFS
-      Just "none" -> CutNothing
-      Just "bfs"  -> CutBFS
-      Just other  -> error $ "unknown stop-on-trace method: " ++ other
+      Nothing       -> CutDFS
+      Just "dfs"    -> CutDFS
+      Just "none"   -> CutNothing
+      Just "bfs"    -> CutBFS
+      Just "seqdfs" -> CutSingleThreadDFS
+      Just other    -> error $ "unknown stop-on-trace method: " ++ other
 
 
 ------------------------------------------------------------------------------
@@ -414,7 +534,7 @@ mkBpIntruderVariants msig =
 -- | Add the variants of the message deduction rule. Uses built-in cached
 -- files for the variants of the message deduction rules for Diffie-Hellman
 -- exponentiation and Bilinear-Pairing.
-addMessageDeductionRuleVariants :: OpenTheory -> IO OpenTheory
+addMessageDeductionRuleVariants :: OpenTranslatedTheory -> IO OpenTranslatedTheory
                                 -- TODO (SM): drop use of IO here.
 addMessageDeductionRuleVariants thy0
   | enableBP msig = addIntruderVariants [ mkDhIntruderVariants
@@ -424,10 +544,11 @@ addMessageDeductionRuleVariants thy0
   where
     msig         = get (sigpMaudeSig . thySignature) thy0
     rules        = subtermIntruderRules False msig ++ specialIntruderRules False
-                   ++ if enableMSet msig then multisetIntruderRules else []
-    thy          = addIntrRuleACs rules thy0
+                   ++ (if enableMSet msig then multisetIntruderRules else [])
+                   ++ (if enableXor msig then xorIntruderRules else [])
+    thy          = addIntrRuleACsAfterTranslate rules thy0
     addIntruderVariants mkRuless = do
-        return $ addIntrRuleACs (concatMap ($ msig) mkRuless) thy
+        return $ addIntrRuleACsAfterTranslate (concatMap ($ msig) mkRuless) thy
 
 -- | Add the variants of the message deduction rule. Uses the cached version
 -- of the @"intruder_variants_dh.spthy"@ file for the variants of the message
@@ -441,7 +562,8 @@ addMessageDeductionRuleVariantsDiff thy0
   where
     msig         = get (sigpMaudeSig . diffThySignature) thy0
     rules diff'  = subtermIntruderRules diff' msig ++ specialIntruderRules diff'
-                    ++ if enableMSet msig then multisetIntruderRules else []
+                    ++ (if enableMSet msig then multisetIntruderRules else [])
+                    ++ (if enableXor msig then xorIntruderRules else [])
     thy          = addIntrRuleACsDiffBoth (rules False) $ addIntrRuleACsDiffBothDiff (rules True) thy0
     addIntruderVariantsDiff mkRuless = do
         return $ addIntrRuleLabels (addIntrRuleACsDiffBothDiff (concatMap ($ msig) mkRuless) $ addIntrRuleACsDiffBoth (concatMap ($ msig) mkRuless) thy)

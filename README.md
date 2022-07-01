@@ -1,6 +1,6 @@
 The Tamarin prover repository
 =============================
-![master branch build-status](https://travis-ci.org/tamarin-prover/tamarin-prover.svg?branch=develop)
+[![master branch build-status](https://travis-ci.org/tamarin-prover/tamarin-prover.svg?branch=develop)](https://travis-ci.org/tamarin-prover/tamarin-prover)
 
 This README describes the organization of the repository of the Tamarin prover
 for security protocol verification. Its intended audience are interested
@@ -12,7 +12,8 @@ https://tamarin-prover.github.io/manual/book/002_installation.html
 Developing and contributing
 ---------------------------
 
-See [contributing instructions](CONTRIBUTING.md).
+See [contributing instructions](CONTRIBUTING.md) for instructions on how to develop,
+test and release changes to the Tamarin prover source code.
 
 
 Version Numbering Policy
@@ -70,18 +71,21 @@ are part of every installation of the Tamarin prover. See
 following sub-directories to organize the models.
 
 ~~~~
-csf12/         the AKE case studies from our CSF'12 paper.
-classic/       classic security protocols like the ones from
-               [SPORE](http://www.lsv.ens-cachan.fr/Software/spore/table.html)
-loops/         experiments for testing loop-invariants and protocols with
-               non-monotonic state
-related_work/  examples from related work on protocols with loops or
-               non-monotonic state
-experiments/   all other experiments
-ake/           more AKE examples including ID-based and tripartite group KE
-               protocols based on bilinear pairing
-features/      (small) models that demonstrate a given feature
-ccs15/	       the observational equivalence case studies from our CCS'15 paper
+accountability/ case studies using the accountability implementation presented in
+                the "Verifying Accountability for Unbounded Sets of Participants" paper
+csf12/          the AKE case studies from our CSF'12 paper.
+classic/        classic security protocols like the ones from
+                [SPORE](http://www.lsv.ens-cachan.fr/Software/spore/table.html)
+loops/          experiments for testing loop-invariants and protocols with
+                non-monotonic state
+related_work/   examples from related work on protocols with loops or
+                non-monotonic state
+experiments/    all other experiments
+ake/            more AKE examples including ID-based and tripartite group KE
+                protocols based on bilinear pairing
+features/       (small) models that demonstrate a given feature
+ccs15/	        the observational equivalence case studies from our CCS'15 paper
+csf-18/         the XOR case studies from the CSF'18 paper
 ~~~~
 
 Feel free to add more sub-directories and describe them here.

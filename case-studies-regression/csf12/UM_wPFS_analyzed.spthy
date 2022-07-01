@@ -3,8 +3,14 @@ theory UM_wPFS begin
 // Function signature and definition of the equational theory E
 
 builtins: diffie-hellman
-functions: fst/1, h/1, pair/2, snd/1
+functions: fst/1[destructor], h/1, pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
+
+
+
+
 
 section{* The Unified Model (UM) Key-Exchange Protocol *}
 
@@ -44,17 +50,17 @@ rule (modulo E) Init_2:
        Y     = x.281^x.282
        z     = x.281^(~ekI.143*x.282)
     
-    4. ~ekI  = ~ekI.144
-       Y     = x.283^inv((~ekI.144*x.284))
-       z     = x.283^inv(x.284)
+    4. ~ekI  = ~ekI.146
+       Y     = x.287^inv((~ekI.146*x.288))
+       z     = x.287^inv(x.288)
     
-    5. ~ekI  = ~ekI.144
-       Y     = x.283^(x.284*inv(~ekI.144))
-       z     = x.283^x.284
+    5. ~ekI  = ~ekI.146
+       Y     = x.287^(x.288*inv(~ekI.146))
+       z     = x.287^x.288
     
-    6. ~ekI  = ~ekI.145
-       Y     = x.284^(x.286*inv((~ekI.145*x.285)))
-       z     = x.284^(x.286*inv(x.285))
+    6. ~ekI  = ~ekI.147
+       Y     = x.288^(x.289*inv((~ekI.147*x.290)))
+       z     = x.288^(x.289*inv(x.290))
   */
 
 rule (modulo E) Resp_1:
@@ -83,17 +89,17 @@ rule (modulo E) Resp_1:
        X     = x.431^x.432
        z     = x.431^(~ekR.218*x.432)
     
-    4. ~ekR  = ~ekR.219
-       X     = x.433^inv((~ekR.219*x.434))
-       z     = x.433^inv(x.434)
+    4. ~ekR  = ~ekR.221
+       X     = x.437^inv((~ekR.221*x.438))
+       z     = x.437^inv(x.438)
     
-    5. ~ekR  = ~ekR.219
-       X     = x.433^(x.434*inv(~ekR.219))
-       z     = x.433^x.434
+    5. ~ekR  = ~ekR.221
+       X     = x.437^(x.438*inv(~ekR.221))
+       z     = x.437^x.438
     
-    6. ~ekR  = ~ekR.220
-       X     = x.434^(x.436*inv((~ekR.220*x.435)))
-       z     = x.434^(x.436*inv(x.435))
+    6. ~ekR  = ~ekR.222
+       X     = x.438^(x.439*inv((~ekR.222*x.440)))
+       z     = x.438^(x.439*inv(x.440))
   */
 
 rule (modulo E) Sessk_reveal:
@@ -167,7 +173,7 @@ solve( Init_1( ~ekI, $I, $R, ~lkI, hkI ) ▶₀ #i1 )
     next
       case c_h
       solve( !KU( 'g'^(~lkI*~x) ) @ #vk.4 )
-        case cexp
+        case c_exp
         solve( !KU( ~lkI ) @ #vk.7 )
           case Ltk_reveal
           solve( !Ltk( $R, ~lkR ) ▶₂ #i4 )
@@ -189,7 +195,7 @@ solve( Init_1( ~ekI, $I, $R, ~lkI, hkI ) ▶₀ #i1 )
                     by contradiction /* from formulas */
                   qed
                 next
-                  case cexp
+                  case c_exp
                   solve( !KU( ~ekI ) @ #vk.11 )
                     case Ephk_reveal
                     by contradiction /* from formulas */
@@ -220,7 +226,7 @@ solve( Init_1( ~ekI, $I, $R, ~lkI, hkI ) ▶₀ #i1 )
                   by contradiction /* from formulas */
                 qed
               next
-                case cexp
+                case c_exp
                 solve( !KU( ~ekI ) @ #vk.9 )
                   case Ephk_reveal
                   by contradiction /* from formulas */
@@ -250,7 +256,7 @@ solve( Init_1( ~ekI, $I, $R, ~lkI, hkI ) ▶₀ #i1 )
                   by contradiction /* from formulas */
                 qed
               next
-                case cexp
+                case c_exp
                 solve( !KU( ~ekI ) @ #vk.9 )
                   case Ephk_reveal
                   by contradiction /* from formulas */
@@ -312,7 +318,7 @@ solve( !Ltk( $R, ~lkR ) ▶₂ #i1 )
     next
       case c_h
       solve( !KU( 'g'^(~lkR*~x) ) @ #vk.4 )
-        case cexp
+        case c_exp
         solve( !KU( ~lkR ) @ #vk.7 )
           case Ltk_reveal
           solve( !Ltk( $I, ~lkI ) ▶₁ #i4 )
@@ -332,7 +338,7 @@ solve( !Ltk( $R, ~lkR ) ▶₂ #i1 )
                   by contradiction /* from formulas */
                 qed
               next
-                case cexp
+                case c_exp
                 solve( !KU( ~ekI ) @ #vk.10 )
                   case Ephk_reveal
                   by contradiction /* from formulas */
@@ -360,7 +366,7 @@ solve( !Ltk( $R, ~lkR ) ▶₂ #i1 )
                 by contradiction /* from formulas */
               qed
             next
-              case cexp
+              case c_exp
               solve( !KU( ~ekI ) @ #vk.8 )
                 case Ephk_reveal
                 by contradiction /* from formulas */
@@ -387,7 +393,7 @@ solve( !Ltk( $R, ~lkR ) ▶₂ #i1 )
                 by contradiction /* from formulas */
               qed
             next
-              case cexp
+              case c_exp
               solve( !KU( ~ekI ) @ #vk.8 )
                 case Ephk_reveal
                 by contradiction /* from formulas */
@@ -405,10 +411,8 @@ qed
 end
 /* Output
 maude tool: 'maude'
- checking version: 2.7.1. OK.
+ checking version: 3.0. OK.
  checking installation: OK.
-SAPIC tool: 'sapic'
-Checking availablity ... OK.
 
 
 analyzing: examples/csf12/UM_wPFS.spthy
@@ -416,8 +420,8 @@ analyzing: examples/csf12/UM_wPFS.spthy
 ------------------------------------------------------------------------------
 analyzed: examples/csf12/UM_wPFS.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 1.039146s
+  output:          examples/csf12/UM_wPFS.spthy.tmp
+  processing time: 0.910660174s
   wPFS_initiator_key (all-traces): verified (40 steps)
   wPFS_responder_key (all-traces): verified (37 steps)
 
@@ -428,8 +432,8 @@ summary of summaries:
 
 analyzed: examples/csf12/UM_wPFS.spthy
 
-  output:          case-studies/temp-analysis.spthy
-  processing time: 1.039146s
+  output:          examples/csf12/UM_wPFS.spthy.tmp
+  processing time: 0.910660174s
   wPFS_initiator_key (all-traces): verified (40 steps)
   wPFS_responder_key (all-traces): verified (37 steps)
 

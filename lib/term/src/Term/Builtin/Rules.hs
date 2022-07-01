@@ -1,7 +1,7 @@
 -- |
 -- Copyright   : (c) 2010-2012 Benedikt Schmidt
 -- License     : GPL v3 (see LICENSE)
--- 
+--
 -- Maintainer  : Benedikt Schmidt <beschmi@gmail.com>
 --
 -- Builtin rewriting rules.
@@ -12,10 +12,12 @@ module Term.Builtin.Rules (
   , bpRules
   , msetRules
   , pairRules
+  , xorRules
   , symEncRules
   , asymEncRules
   , signatureRules
-
+  , revealSignatureRules
+  , locationReportRules
   -- * Convenience export
   , module Term.Builtin.Signature
 ) where
@@ -37,7 +39,7 @@ dhRules :: Set (RRule LNTerm)
 dhRules = S.fromList
     [ expo(x1,one) `RRule` x1
     , expo(expo(x1,x2),x3) `RRule` expo(x1,(x2 *: x3))
-
+    , expo(dhNeutral,x1) `RRule` dhNeutral
     , x1 *: one `RRule` x1
     , inv (inv x1) `RRule` x1
     , inv one `RRule` one
@@ -52,6 +54,7 @@ dhRules = S.fromList
   where
     expo = fAppExp
     inv  = fAppInv
+    dhNeutral = fAppDHNeutral
     one  = fAppOne
 
 -- | The rewriting rules for bilinear pairing. These rules extend the
@@ -75,12 +78,26 @@ bpRules = S.fromList
 msetRules :: Set (RRule LNTerm)
 msetRules = S.empty
 
+-- | The rewriting rules for Xor. This is a presentation with the finite variant property.
+xorRules :: Set (RRule LNTerm)
+xorRules = S.fromList
+    [ x1 +: zero `RRule` x1
+    , x1 +: x1 `RRule` zero
+    , x1 +: x1 +: x2 `RRule` x2
+    ]
+  where
+    zero  = fAppZero
+
 -- | The rewriting rules for standard subterm operators that are builtin.
-pairRules, symEncRules, asymEncRules, signatureRules :: Set (CtxtStRule)
+pairRules, symEncRules, asymEncRules, signatureRules, revealSignatureRules, locationReportRules :: Set (CtxtStRule)
 pairRules = S.fromList
     [ fAppFst (fAppPair (x1,x2)) `CtxtStRule` (StRhs [[0,0]] x1)
     , fAppSnd (fAppPair (x1,x2)) `CtxtStRule` (StRhs [[0,1]] x2) ]
 symEncRules    = S.fromList [ sdec (senc (x1,x2), x2)     `CtxtStRule` (StRhs [[0,0]] x1) ]
 asymEncRules   = S.fromList [ adec (aenc (x1, pk x2), x2) `CtxtStRule` (StRhs [[0,0]] x1) ]
 signatureRules = S.fromList [ verify (sign (x1,x2), x1, pk x2) `CtxtStRule` (StRhs [[0,0]] trueC) ]
-
+revealSignatureRules = S.fromList [ revealVerify (revealSign (x1,x2), x1, pk x2) `CtxtStRule` (StRhs [[0,0]] trueC),
+                                    extractMessage (revealSign (x1,x2)) `CtxtStRule` (StRhs [[0,0]] x1)]
+locationReportRules = S.fromList [ check_rep (rep (x1,x2), x2) `CtxtStRule` (StRhs [[0,0]] x1),
+                                   get_rep (rep (x1,x2)) `CtxtStRule` (StRhs [[0,0]] x1)
+                                 ]
