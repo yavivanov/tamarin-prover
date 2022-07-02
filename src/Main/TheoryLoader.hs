@@ -95,21 +95,14 @@ import qualified Theory.Text.Pretty as Pretty
 -- | Flags for loading a theory (either command line or from a configuration).
 theoryConfFlags :: [Flag Arguments]
 theoryConfFlags =
-  [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
-      "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
-
-  , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
-      "Select lemma(s) by name or prefx (can be repeated)"
-
-  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
+  [ flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
       "How to search for traces (default DFS)"
 
   , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
       "Bound the depth of the proofs"
 
-  , flagOpt (prettyGoalRanking $ head $ defaultRankings False)
-      ["heuristic"] (updateArg "heuristic") ("(" ++ intersperse '|' (keys goalRankingIdentifiers) ++ ")+")
-      ("Sequence of goal rankings to use (default '" ++ prettyGoalRanking (head $ defaultRankings False) ++ "')")
+  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
+      "Try to auto-generate sources lemmas"
 
   , flagOpt "summary" ["partial-evaluation"] (updateArg "partialEvaluation")
       "SUMMARY|VERBOSE"
@@ -122,17 +115,22 @@ theoryLoadFlags :: [Flag Arguments]
 theoryLoadFlags = theoryConfFlags ++
   [ flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
       "Define flags for pseudo-preprocessor."
-  , flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
-      "Define flags for pseudo-preprocessor"
+  
+  , flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
+      "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
+
+  , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
+      "Select lemma(s) by name or prefx (can be repeated)"
+  
+  , flagOpt (prettyGoalRanking $ head $ defaultRankings False)
+      ["heuristic"] (updateArg "heuristic") ("(" ++ intersperse '|' (keys goalRankingIdentifiers) ++ ")+")
+      ("Sequence of goal rankings to use (default '" ++ prettyGoalRanking (head $ defaultRankings False) ++ "')")
 
   , flagNone ["diff"] (addEmptyArg "diff")
       "Turn on observational equivalence mode using diff terms"
 
   , flagNone ["quit-on-warning"] (addEmptyArg "quit-on-warning")
       "Strict mode that quits on any warning that is emitted"
-
-  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
-      "Try to auto-generate sources lemmas"
 
   , flagOpt (oraclePath defaultOracle) ["oraclename"] (updateArg "oraclename") "FILE"
       ("Path to the oracle heuristic (default '" ++ oraclePath defaultOracle ++ "')")
