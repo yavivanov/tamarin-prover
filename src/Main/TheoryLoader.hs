@@ -78,7 +78,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import           Sapic
-import           Main.Console                        (renderDoc, argExists, findArg, addEmptyArg, updateArg, Arguments, getOutputModule, ArgKey, ArgVal)
+import           Main.Console                        (renderDoc, argExists, findArg, addEmptyArg, updateArg, Arguments, getOutputModule, ArgKey, ArgVal, addArg)
 
 import           Main.Environment
 
@@ -276,12 +276,13 @@ loadClosedThyWf :: Arguments -> FilePath -> IO (ClosedTheory, Pretty.Doc)
 loadClosedThyWf as inFile = do
     (openThy, transThy0, as') <- loadOpenAndTranslatedThy as inFile
     transThy <- addMessageDeductionRuleVariants transThy0
-    sig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy
+    sig <- toSignatureWithMaude (maudePath as') $ get thySignature transThy
     -- report
     let errors = checkWellformedness transThy sig ++ Sapic.checkWellformednessSapic openThy
     let report = reportWellformednessDoc errors
     -- return closed theory
-    closedTheory <- closeThyWithMaude sig as' openThy transThy
+    let as'' = if argExists "oraclename" as' then as' else addArg "oraclename" (takeWhile ('.' /= ) (show inFile)  ++ ".oracle") as'
+    closedTheory <- closeThyWithMaude sig as'' openThy transThy
     return (closedTheory, report)
 
 -- | Load a closed theory and report on well-formedness errors.

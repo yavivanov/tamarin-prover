@@ -34,6 +34,7 @@ module Main.Console (
   , helpFlag
 
   -- ** Retrieving arguments
+  , addArg
   , getArg
   , findArg
   , argExists
@@ -87,10 +88,10 @@ versionStr = unlines
     ]
   , concat
     [ "Git revision: "
-    , $(gitHash)
-    , if $(gitDirty) then " (with uncommited changes)" else ""
-    , ", branch: "
-    , $(gitBranch)
+    --, $(gitHash)
+    --, if $(gitDirty) then " (with uncommited changes)" else ""
+    --, ", branch: "
+    --, $(gitBranch)
     ]
   , concat
     [ "Compiled at: "
