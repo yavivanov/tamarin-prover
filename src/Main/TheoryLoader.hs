@@ -72,7 +72,6 @@ import           System.Console.CmdArgs.Explicit
 
 import           Theory
 import           Theory.Text.Parser                  (parseIntruderRules, parseOpenTheory, parseOpenTheoryString, parseOpenDiffTheory, parseOpenDiffTheoryString)
-import           Theory.Text.Pretty                  hiding (mode)
 import           Theory.Tools.AbstractInterpretation (EvaluationStyle(..))
 import           Theory.Tools.IntruderRules          (specialIntruderRules, subtermIntruderRules
                                                      , multisetIntruderRules, xorIntruderRules)
@@ -82,7 +81,6 @@ import           Main.Console                        (renderDoc, argExists, find
 
 import           Main.Environment
 
-import           Debug.Trace
 
 import           Text.Parsec                hiding ((<|>),try)
 import           Safe
@@ -92,39 +90,40 @@ import qualified Theory.Text.Pretty as Pretty
 -- Theory loading: shared between interactive and batch mode
 ------------------------------------------------------------------------------
 
--- | Flags for loading a theory (either command line or from a configuration).
+-- | Flags for loading a theory from a configuration.
 theoryConfFlags :: [Flag Arguments]
 theoryConfFlags =
   [ flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
       "How to search for traces (default DFS)"
 
-  , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
-      "Bound the depth of the proofs"
-
   , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
       "Try to auto-generate sources lemmas"
 
-  , flagOpt "summary" ["partial-evaluation"] (updateArg "partialEvaluation")
-      "SUMMARY|VERBOSE"
-      "Partially evaluate multiset rewriting system"
   ]
 
-
--- | Flags for loading a theory.
+-- | Flags for loading a theory (either command line or from a configuration).
 theoryLoadFlags :: [Flag Arguments]
 theoryLoadFlags = theoryConfFlags ++
-  [ flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
-      "Define flags for pseudo-preprocessor."
-  
-  , flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
+
+  [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
       "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
 
   , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
       "Select lemma(s) by name or prefx (can be repeated)"
+
+  , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
+      "Bound the depth of the proofs"
   
   , flagOpt (prettyGoalRanking $ head $ defaultRankings False)
       ["heuristic"] (updateArg "heuristic") ("(" ++ intersperse '|' (keys goalRankingIdentifiers) ++ ")+")
       ("Sequence of goal rankings to use (default '" ++ prettyGoalRanking (head $ defaultRankings False) ++ "')")
+  
+  , flagOpt "summary" ["partial-evaluation"] (updateArg "partialEvaluation")
+      "SUMMARY|VERBOSE"
+      "Partially evaluate multiset rewriting system"
+    
+  , flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
+      "Define flags for pseudo-preprocessor."
 
   , flagNone ["diff"] (addEmptyArg "diff")
       "Turn on observational equivalence mode using diff terms"
@@ -191,39 +190,37 @@ diffLemmaSelector as lem
         | lastMay pattern == Just '*' = init pattern `isPrefixOf` get lDiffName lem
         | otherwise = get lDiffName lem == pattern
 
--- | Update command line arguments with arguments taken from the file
+-- | Update command line arguments with arguments taken from the configuration block.
 updateArguments :: Arguments -> String -> Arguments
 updateArguments as argString =
     foldr updateUnsetArg as $ processValue (mode "theory arguments" [] "" (flagArg (updateArg "na") "N/A") theoryConfFlags) (splitArgs argString)
   where
     updateUnsetArg :: (ArgKey, ArgVal) -> Arguments -> Arguments
-    updateUnsetArg (a, v) args = case argExists a args of
-        True  -> args
-        False -> (a,v):args
+    updateUnsetArg (a, v) args = if argExists a args then args else (a,v):args
 
 -- | Load an open theory from a file.
 loadOpenThy :: Arguments -> FilePath -> IO (OpenTheory, Arguments)
 loadOpenThy as inFile = do
     (thy, argString) <- parseOpenTheory (diff as ++ defines as ++ quitOnWarning as) inFile
-    return (thy, (updateArguments as argString))
+    return (thy, updateArguments as argString)
 
 -- | Load an open theory from a file. Returns the open translated theory.
 loadOpenTranslatedThy :: Arguments -> FilePath -> IO (OpenTranslatedTheory, Arguments)
 loadOpenTranslatedThy as inFile =  do
-    (thy, as) <- loadOpenThy as inFile
+    (thy, as') <- loadOpenThy as inFile
     thy' <- Sapic.translate thy
     thy'' <- Acc.translate thy'
-    return (removeTranslationItems thy'', as)
+    return (removeTranslationItems thy'', as')
 
 -- | Load an open theory from a file. Returns the open and the translated theory.
 loadOpenAndTranslatedThy :: Arguments -> FilePath -> IO (OpenTheory, OpenTranslatedTheory, Arguments)
 loadOpenAndTranslatedThy as inFile =  do
-    thy <- loadOpenThy as inFile
+    (thy, as') <- loadOpenThy as inFile
     transThy <- 
-      Sapic.typeTheory (fst thy)
+      Sapic.typeTheory thy
       >>= Sapic.translate
       >>= Acc.translate
-    return (fst thy, removeTranslationItems transThy, snd thy)
+    return (thy, removeTranslationItems transThy, as')
 
 -- | Load a closed theory from a file.
 loadClosedThy :: Arguments -> FilePath -> IO ClosedTheory
@@ -343,11 +340,12 @@ reportOnClosedThyStringWellformedness :: Arguments -> String -> IO String
 reportOnClosedThyStringWellformedness as input =
     case loadOpenThyString as input of
       Left  err   -> return $ "parse error: " ++ show err
-      Right (openThy, as') -> do
+      Right (openThy, argString) -> do
             transThy <- Sapic.typeTheory openThy
                   >>= Sapic.translate
                   >>= Acc.translate
-            transSig <- toSignatureWithMaude (maudePath as) $ get thySignature transThy
+            let as' = updateArguments as argString
+            transSig <- toSignatureWithMaude (maudePath as') $ get thySignature transThy
             -- report
             let errors = checkWellformedness (removeTranslationItems transThy) transSig 
                       ++ Sapic.checkWellformednessSapic openThy
@@ -355,7 +353,7 @@ reportOnClosedThyStringWellformedness as input =
             case errors of 
                   []     -> return ""
                   report -> do
-                    if elem "quit-on-warning" (quitOnWarning as) then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
+                    if elem "quit-on-warning" (quitOnWarning as') then error "quit-on-warning mode selected - aborting on wellformedness errors." else putStrLn ""
                     return $ " WARNING: ignoring the following wellformedness errors: " ++(renderDoc $ prettyWfErrorReport report)
 
 -- | Load a closed diff theory and report on well-formedness errors.

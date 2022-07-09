@@ -1,7 +1,7 @@
 theory TestConfiguration
-configuration: "--partial-evaluation=verbose"
+configuration: "--stop-on-trace=BFS --auto-sources"
 begin
-
+heuristic: o
 rule Testing:
   [ Fr(x) ]
 --[ Test(x) ]->
@@ -12,3 +12,4 @@ lemma test_lemma:
   "Ex x #i. Test(x) @ i"
 
 end
+
