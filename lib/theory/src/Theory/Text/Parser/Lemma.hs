@@ -38,8 +38,8 @@ constructorp = asum $ map (\x -> symbol_ (show x) $> x) constructorList
     constructorList = enumFrom minBound
 
 -- | Parse a 'LemmaAttribute'.
-lemmaAttribute :: Bool -> Maybe FilePath -> Parser LemmaAttribute
-lemmaAttribute diff workDir = asum
+lemmaAttribute :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser LemmaAttribute
+lemmaAttribute inFile diff workDir = asum
   [ symbol "typing"        *> trace ("Deprecation Warning: using 'typing' is retired notation, replace all uses of 'typing' by 'sources'.\n") pure SourceLemma -- legacy support, emits deprecation warning
 --  , symbol "typing"        *> fail "Using 'typing' is retired notation, replace all uses of 'typing' by 'sources'."
   , symbol "sources"       *> pure SourceLemma
@@ -47,7 +47,7 @@ lemmaAttribute diff workDir = asum
   , symbol "diff_reuse"    *> pure ReuseDiffLemma
   , symbol "use_induction" *> pure InvariantLemma
   , symbol "hide_lemma" *> opEqual *> (HideLemma <$> identifier)
-  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking diff workDir))
+  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking inFile diff workDir))
   , symbol "output"  *> opEqual *> (LemmaModule <$> list constructorp)
   , symbol "left"          *> pure LHSLemma
   , symbol "right"         *> pure RHSLemma
@@ -61,24 +61,24 @@ traceQuantifier = asum
   , symbol "exists-trace"  *> pure ExistsTrace
   ]
 
-protoLemma :: Parser f -> Maybe FilePath -> Parser (ProtoLemma f ProofSkeleton)
-protoLemma parseFormula workDir = skeletonLemma <$> (symbol "lemma" *> optional moduloE *> identifier)
-                      <*> (option [] $ list (lemmaAttribute False workDir))
+protoLemma :: Parser f -> Maybe FilePath -> Maybe FilePath -> Parser (ProtoLemma f ProofSkeleton)
+protoLemma parseFormula inFile workDir = skeletonLemma <$> (symbol "lemma" *> optional moduloE *> identifier)
+                      <*> (option [] $ list (lemmaAttribute inFile False workDir))
                       <*> (colon *> option AllTraces traceQuantifier)
                       <*> doubleQuoted parseFormula
                       <*> (startProofSkeleton <|> pure (unproven ()))
 
 
 -- | Parse a lemma.
-lemma :: Maybe FilePath -> Parser (SyntacticLemma ProofSkeleton)
+lemma :: Maybe FilePath -> Maybe FilePath -> Parser (SyntacticLemma ProofSkeleton)
 lemma = protoLemma $ standardFormula msgvar nodevar
 
 -- | Parse a lemma w/o syntactic sugar
-plainLemma :: Maybe FilePath -> Parser (Lemma ProofSkeleton)
+plainLemma :: Maybe FilePath -> Maybe FilePath -> Parser (Lemma ProofSkeleton)
 plainLemma = protoLemma plainFormula
 
 -- | Parse a diff lemma.
-diffLemma :: Maybe FilePath -> Parser (DiffLemma DiffProofSkeleton)
-diffLemma workDir = skeletonDiffLemma <$> (symbol "diffLemma" *> identifier)
-                              <*> (option [] $ list (lemmaAttribute True workDir))
+diffLemma :: Maybe FilePath -> Maybe FilePath -> Parser (DiffLemma DiffProofSkeleton)
+diffLemma inFile workDir = skeletonDiffLemma <$> (symbol "diffLemma" *> identifier)
+                              <*> (option [] $ list (lemmaAttribute inFile True workDir))
                               <*> (colon *> (diffProofSkeleton <|> pure (diffUnproven ())))

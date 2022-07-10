@@ -77,7 +77,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import           Sapic
-import           Main.Console                        (renderDoc, argExists, findArg, addEmptyArg, updateArg, Arguments, getOutputModule, ArgKey, ArgVal, addArg)
+import           Main.Console                        (renderDoc, argExists, findArg, addEmptyArg, updateArg, Arguments, getOutputModule, ArgKey, ArgVal, addArg, getArg)
 
 import           Main.Environment
 
@@ -131,8 +131,8 @@ theoryLoadFlags = theoryConfFlags ++
   , flagNone ["quit-on-warning"] (addEmptyArg "quit-on-warning")
       "Strict mode that quits on any warning that is emitted"
 
-  , flagOpt (oraclePath defaultOracle) ["oraclename"] (updateArg "oraclename") "FILE"
-      ("Path to the oracle heuristic (default '" ++ oraclePath defaultOracle ++ "')")
+  , flagOpt "" ["oraclename"] (updateArg "oraclename") "FILE"
+      ("Path to the oracle heuristic (default '" ++ "theory_filename.oracle" ++ "')")
 
 --  , flagOpt "" ["diff"] (updateArg "diff") "OFF|ON"
 --      "Turn on observational equivalence (default OFF)."
@@ -278,7 +278,7 @@ loadClosedThyWf as inFile = do
     let errors = checkWellformedness transThy sig ++ Sapic.checkWellformednessSapic openThy
     let report = reportWellformednessDoc errors
     -- return closed theory
-    let as'' = if argExists "oraclename" as' then as' else addArg "oraclename" (takeWhile ('.' /= ) (show inFile)  ++ ".oracle") as'
+    let as'' = if argExists "oraclename" as' && getArg "oraclename" as' /= "" then as' else addArg "oraclename" (takeWhile ('.' /= ) inFile  ++ ".oracle") as'
     closedTheory <- closeThyWithMaude sig as'' openThy transThy
     return (closedTheory, report)
 

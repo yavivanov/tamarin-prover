@@ -26,11 +26,11 @@ caseTest =  CaseTest <$> (symbol "test" *> identifier)
                      <*> (colon *> doubleQuoted (standardFormula msgvar nodevar))
 
 -- | Parse an accountability lemma.
-lemmaAcc :: Maybe FilePath -> Parser AccLemma
-lemmaAcc workDir = try $ do
+lemmaAcc :: Maybe FilePath -> Maybe FilePath -> Parser AccLemma
+lemmaAcc inFile workDir = try $ do
                _ <-  symbol "lemma"
                name <- identifier
-               attributes <- option [] $ list (try (Left <$> lemmaAttribute False workDir))
+               attributes <- option [] $ list (try (Left <$> lemmaAttribute inFile False workDir))
                _ <-  colon
                identifiers <- commaSep1 $ identifier
                _ <-  try (symbol "accounts for") <|> symbol "account for"
