@@ -48,7 +48,7 @@ lemmaAttribute inFile diff workDir = asum
   , symbol "diff_reuse"    *> pure ReuseDiffLemma
   , symbol "use_induction" *> pure InvariantLemma
   , symbol "hide_lemma" *> opEqual *> (HideLemma <$> identifier)
-  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking (Just $ takeWhile ('.' /= ) (fromMaybe "" inFile) ++ ".oracle") diff workDir))
+  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking (Just $ takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse $ fromMaybe "" inFile) ++ ".oracle") diff workDir))
   , symbol "output"  *> opEqual *> (LemmaModule <$> list constructorp)
   , symbol "left"          *> pure LHSLemma
   , symbol "right"         *> pure RHSLemma

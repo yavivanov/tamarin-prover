@@ -217,7 +217,7 @@ export thy = do
                     _    -> return c
 
 heuristic :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser [GoalRanking]
-heuristic inFile diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking (Just $ takeWhile ('.' /=) (fromMaybe "" inFile) ++ ".oracle") diff workDir) <* lexeme spaces
+heuristic inFile diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking (Just $ takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse $ fromMaybe "" inFile) ++ ".oracle") diff workDir) <* lexeme spaces
 
 goalRanking :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser GoalRanking
 goalRanking inFile diff workDir = try oracleRanking <|> regularRanking <?> "goal ranking"
