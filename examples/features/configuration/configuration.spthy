@@ -1,7 +1,6 @@
 theory TestConfiguration
-configuration: "--stop-on-trace=BFS --auto-sources"
+configuration: "--auto-sources --stop-on-trace=BFS"
 begin
-heuristic: o
 rule Testing:
   [ Fr(x) ]
 --[ Test(x) ]->

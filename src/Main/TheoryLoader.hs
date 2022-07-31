@@ -15,6 +15,7 @@
 module Main.TheoryLoader (
   -- * Static theory loading settings
     theoryLoadFlags
+  , theoryConfFlags
   , lemmaSelector
 
   , TheoryLoadOptions(..)
@@ -47,8 +48,8 @@ import           Prelude                             hiding (id, (.))
 
 import           Data.Char                           (toLower)
 import           Data.Label
-import           Data.List                           (isPrefixOf,intersperse, find)
-import           Data.Map                            (keys)
+import           Data.List                           (isPrefixOf,intersperse, find, isInfixOf)
+import           Data.Map                            (keys, member)
 import           Data.FileEmbed                      (embedFile)
 
 import           Control.Category
@@ -62,7 +63,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import qualified Sapic as Sapic
-import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments)
+import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal)
 
 import           Main.Environment
 
@@ -75,12 +76,14 @@ import           Text.Read (readEither)
 import           Theory.Module (ModuleType (ModuleSpthy, ModuleMsr))
 import           qualified Data.Label as L
 import           Theory.Text.Parser.Token (parseString)
-import           Data.Bifunctor (Bifunctor(bimap))
+import           Data.Bifunctor (Bifunctor(bimap, second))
 import           Data.Bitraversable (Bitraversable(bitraverse))
 import           Control.Monad.Catch (MonadCatch)
 import qualified Accountability as Acc
 import qualified Accountability.Generation as Acc
 import GHC.Records (HasField(getField))
+import Data.Text (splitOn)
+import Data.ByteString (split)
 
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
@@ -109,7 +112,7 @@ theoryLoadFlags = theoryConfFlags ++
 
   , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
       "Bound the depth of the proofs"
-  
+
   , flagOpt (prettyGoalRanking $ head $ defaultRankings False)
       ["heuristic"] (updateArg "heuristic") ("(" ++ intersperse '|' (keys goalRankingIdentifiers) ++ ")+")
       ("Sequence of goal rankings to use (default '" ++ prettyGoalRanking (head $ defaultRankings False) ++ "')")
@@ -117,7 +120,7 @@ theoryLoadFlags = theoryConfFlags ++
   , flagOpt "summary" ["partial-evaluation"] (updateArg "partial-evaluation")
       "SUMMARY|VERBOSE"
       "Partially evaluate multiset rewriting system"
-    
+
   , flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
       "Define flags for pseudo-preprocessor."
 
@@ -273,7 +276,7 @@ instance Show TheoryLoadError
     show (WarningError e) = Pretty.render (prettyWfErrorReport e)
 
 -- FIXME: How can we avoid the MonadCatch here?
-loadTheory :: MonadCatch m => TheoryLoadOptions -> String -> FilePath -> ExceptT TheoryLoadError m (Either OpenTheory OpenDiffTheory)
+loadTheory :: MonadCatch m => TheoryLoadOptions -> String -> FilePath -> ExceptT TheoryLoadError m (Either (OpenTheory, String) (OpenDiffTheory, String))
 loadTheory thyOpts input inFile = do
     thy <- withExceptT ParserError $ liftEither $ unwrapError $ bimap parse parse thyParser
     withTheory translate thy
@@ -282,11 +285,18 @@ loadTheory thyOpts input inFile = do
               | otherwise  = Left  $ theory     $ Just inFile
 
     parse p = parseString (toParserFlags thyOpts) inFile p input
-
-    translate | isParseOnlyMode = return
-              | otherwise       = Sapic.typeTheory
-                              >=> Sapic.translate
-                              >=> Acc.translate
+    
+    --translate :: (OpenTheory, String) -> ExceptT TheoryLoadError m (OpenTheory, String)
+    translate (thy, confOpts)
+     | isParseOnlyMode = return (thy, confOpts)
+     | otherwise       = do
+      tthy <- Sapic.typeTheory thy
+      sthy <- Sapic.translate tthy
+      athy <- Acc.translate sthy
+      return (athy, confOpts)
+      -- Sapic.typeTheory
+                              -- >=> Sapic.translate
+                              -- >=> Acc.translate
 
     isDiffMode      = L.get oDiffMode thyOpts
     isParseOnlyMode = L.get oParseOnlyMode thyOpts
@@ -297,6 +307,7 @@ loadTheory thyOpts input inFile = do
     unwrapError (Right (Right v)) = Right $ Right v
 
     withTheory     f t = bitraverse f return t
+
 
 closeTheory :: MonadError TheoryLoadError m => TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
 closeTheory thyOpts sig srcThy = do

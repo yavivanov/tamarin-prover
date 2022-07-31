@@ -116,6 +116,7 @@ import Control.Monad.Except (runExceptT)
 import Main.TheoryLoader
 import Main.Console (renderDoc)
 import Theory.Tools.Wellformedness (prettyWfErrorReport)
+import Data.Bifunctor (Bifunctor(bimap))
 
 -- Quasi-quotation syntax changed from GHC 6 to 7,
 -- so we need this switch in order to support both
@@ -495,10 +496,10 @@ postRootR = do
             thyWithRep <- liftIO $ runExceptT $ do
               openThy <- loadThy yesod (T.unpack $ T.decodeUtf8 $ BS.concat content) (T.unpack $ fileName fileinfo)
 
-              let sig = either (get thySignature) (get diffThySignature) openThy
+              let sig = either (get thySignature) (get diffThySignature) $ bimap fst fst openThy
               sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath (thyOpts yesod)) sig
 
-              closeThy yesod sig' openThy
+              closeThy yesod sig' $ bimap fst fst openThy
 
             case thyWithRep of
               Left err -> setMessage $ "Theory loading failed:\n" <> toHtml (show err)
