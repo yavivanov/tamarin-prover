@@ -63,7 +63,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import qualified Sapic as Sapic
-import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal)
+import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal, getArg, addArg)
 
 import           Main.Environment
 
@@ -151,6 +151,7 @@ data TheoryLoadOptions = TheoryLoadOptions {
   , _oOutputModule      :: Maybe ModuleType -- Note: This flag is only used for batch mode.
   , _oMaudePath         :: FilePath -- FIXME: Other functions defined in Environment.hs
   , _oParseOnlyMode     :: Bool
+  , _oOracleName        :: Bool
 } deriving Show
 $(mkLabels [''TheoryLoadOptions])
 
@@ -169,6 +170,7 @@ defaultTheoryLoadOptions = TheoryLoadOptions {
   , _oOutputModule      = Nothing
   , _oMaudePath         = "maude"
   , _oParseOnlyMode     = False
+  , _oOracleName        = False
 }
 
 toParserFlags :: TheoryLoadOptions -> [String]
@@ -194,6 +196,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                          <*> outputModule
                          <*> (return $ maudePath as)
                          <*> parseOnlyMode
+                         <*> oracleName
   where
     proveMode  = return $ argExists "prove" as
     lemmaNames = return $ findArg "prove" as ++ findArg "lemma" as
@@ -240,6 +243,8 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     -- NOTE: Output mode implicitly activates parse-only mode
     parseOnlyMode = return $ argExists "parseOnly" as || argExists "outputMode" as
+
+    oracleName = return $ argExists "oraclename" as && getArg "oraclename" as /= ""
 
 lemmaSelectorByModule :: HasLemmaAttributes l => TheoryLoadOptions -> l -> Bool
 lemmaSelectorByModule thyOpt lem = case lemmaModules of
@@ -309,8 +314,8 @@ loadTheory thyOpts input inFile = do
     withTheory     f t = bitraverse f return t
 
 
-closeTheory :: MonadError TheoryLoadError m => TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
-closeTheory thyOpts sig srcThy = do
+closeTheory :: MonadError TheoryLoadError m => TheoryLoadOptions -> FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+closeTheory thyOpts inFile sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
                          (const []) srcThy
 
@@ -341,8 +346,21 @@ closeTheory thyOpts sig srcThy = do
     partialStyle  = L.get oPartialEvaluation thyOpts
     quitOnWarning = L.get oQuitOnWarning thyOpts
 
-    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts
+    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts'
            | otherwise                = mempty
+      where
+        thyOpts' = case L.get oHeuristic thyOpts of
+          Nothing -> thyOpts
+          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map defaultOracleName grs) thyOpts
+        defaultOracleName heur = case heur of 
+          OracleSmartRanking (Oracle "" "") -> OracleSmartRanking $ Oracle "." $ inFileOracle inFile
+          OracleRanking  (Oracle "" "") -> OracleSmartRanking $ Oracle "." $ inFileOracle inFile
+          h -> h
+          where
+            inFileOracle inFile0 = takeWhile ('.' /= ) inFile0  ++ ".oracle"
+
+
+
 
     diffProver | L.get oProveMode thyOpts = replaceDiffSorryProver $ runAutoDiffProver $ constructAutoProver thyOpts
                | otherwise                = mempty

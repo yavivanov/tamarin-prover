@@ -91,7 +91,7 @@ withWebUI :: String                          -- ^ Message to output once the sev
           -> TheoryLoadOptions               -- ^ Options for loading theories
           -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
           -- ^ Theory loader (from string).
-          -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+          -> (FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
           -- ^ Theory closer.
           -> Bool                            -- ^ Show debugging messages?
           -> (String, FilePath)              -- ^ Path to graph rendering binary (dot or json)
@@ -157,7 +157,7 @@ loadTheories :: TheoryLoadOptions
              -> String
              -> FilePath
              -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))
-             -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+             -> (FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
              -> AutoProver
              -> IO TheoryMap
 loadTheories thOpts readyMsg thDir thLoad thClose autoProver = do
@@ -173,7 +173,7 @@ loadTheories thOpts readyMsg thDir thLoad thClose autoProver = do
         openThy <- thLoad srcThy path
         let sig = either (L.get thySignature) (L.get diffThySignature) (bimap fst fst openThy)
         sig' <- liftIO $ toSignatureWithMaude (L.get oMaudePath thOpts) sig
-        thClose sig' (bimap fst fst openThy)
+        thClose path sig' (bimap fst fst openThy)
 
       case result of
         Left (ParserError e) -> do

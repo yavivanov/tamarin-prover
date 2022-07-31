@@ -174,7 +174,7 @@ run thisMode as
         let sig = either (\(t,_) -> get thySignature t) (\(d,_) -> get diffThySignature d) thy
         sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath thyLoadOptions) sig
 
-        (report, thy') <- closeTheory (updatedThyLoadOptions $ either snd snd thy) sig' (bimap fst fst thy)
+        (report, thy') <- closeTheory (updatedThyLoadOptions $ either snd snd thy) inFile sig' (bimap fst fst thy)
         either (\t -> return (prettyClosedTheory t,     ppWf report Pretty.$--$ prettyClosedSummary t))
                (\d -> return (prettyClosedDiffTheory d, ppWf report Pretty.$--$ prettyClosedDiffSummary d)) thy'
       where

@@ -128,7 +128,7 @@ data WebUI = WebUI
     -- ^ Options for loading theories
   , loadThy            :: String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String))
     -- ^ Load a theory according to command-line arguments.
-  , closeThy           :: SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory)
+  , closeThy           :: FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory)
     -- ^ Close an open theory according to command-line arguments.
   , theoryVar          :: MVar (TheoryMap)
     -- ^ MVar that holds the theory map

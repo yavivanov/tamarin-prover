@@ -30,6 +30,7 @@ import Theory.Text.Parser.Proof
 import Theory.Text.Parser.Signature
 
 import Data.Functor (($>))
+import Data.Maybe (fromMaybe)
 
 -- | Parse an arbitrary type consisting of simple constructors
 constructorp :: (Show a, Enum a, Bounded a) => Parser a
@@ -47,7 +48,7 @@ lemmaAttribute inFile diff workDir = asum
   , symbol "diff_reuse"    *> pure ReuseDiffLemma
   , symbol "use_induction" *> pure InvariantLemma
   , symbol "hide_lemma" *> opEqual *> (HideLemma <$> identifier)
-  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking inFile diff workDir))
+  , symbol "heuristic"  *> opEqual *> (LemmaHeuristic <$> many1 (goalRanking (Just $ takeWhile ('.' /= ) (fromMaybe "" inFile) ++ ".oracle") diff workDir))
   , symbol "output"  *> opEqual *> (LemmaModule <$> list constructorp)
   , symbol "left"          *> pure LHSLemma
   , symbol "right"         *> pure RHSLemma

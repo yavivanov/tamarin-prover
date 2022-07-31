@@ -499,7 +499,7 @@ postRootR = do
               let sig = either (get thySignature) (get diffThySignature) $ bimap fst fst openThy
               sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath (thyOpts yesod)) sig
 
-              closeThy yesod sig' $ bimap fst fst openThy
+              closeThy yesod (T.unpack $ fileName fileinfo) sig' $ bimap fst fst openThy
 
             case thyWithRep of
               Left err -> setMessage $ "Theory loading failed:\n" <> toHtml (show err)

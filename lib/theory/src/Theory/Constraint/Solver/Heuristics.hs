@@ -88,7 +88,7 @@ defaultHeuristic = Heuristic . defaultRankings
 
 -- Default to "./oracle" in the current working directory.
 defaultOracle :: Oracle
-defaultOracle = Oracle "." "oracle"
+defaultOracle = Oracle "" ""
 
 maybeSetOracleWorkDir :: Maybe FilePath -> Oracle -> Oracle
 maybeSetOracleWorkDir p o = maybe o (\x -> o{ oracleWorkDir = x }) p

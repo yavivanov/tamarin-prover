@@ -45,7 +45,7 @@ import Data.Label.Total
 import Data.Label.Mono (Lens)
 import Theory.Sapic
 import qualified Data.Functor
-import Data.Maybe (isNothing)
+import Data.Maybe (isNothing, fromMaybe)
 
 
  -- Describes the mapping between Maude Signatures and the builtin Name
@@ -217,7 +217,7 @@ export thy = do
                     _    -> return c
 
 heuristic :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser [GoalRanking]
-heuristic inFile diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking inFile diff workDir) <* lexeme spaces
+heuristic inFile diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking (Just $ takeWhile ('.' /=) (fromMaybe "" inFile) ++ ".oracle") diff workDir) <* lexeme spaces
 
 goalRanking :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser GoalRanking
 goalRanking inFile diff workDir = try oracleRanking <|> regularRanking <?> "goal ranking"
