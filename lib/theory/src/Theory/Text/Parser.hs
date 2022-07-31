@@ -17,6 +17,8 @@ module Theory.Text.Parser (
   , parseOpenTheoryString
   , parseOpenDiffTheory
   , parseOpenDiffTheoryString
+  , theory
+  , diffTheory
   , parseLemma
   , parseRestriction
   , parseIntruderRules
@@ -239,10 +241,9 @@ theory inFile = do
            addItems inFile0 fileArgs thy'
            -- add legacy deprecation warning output
       , do test <- caseTest
-           thy1 <- liftedAddCaseTest thy test
-           thy2 <- maybe (return thy1) (liftedAddPredicate thy1) (caseTestToPredicate test)
-           addItems inFile0 fileArgs thy2
-      , do accLem <- lemmaAcc inFile0 workDir
+           thy' <- liftedAddCaseTest thy test
+           addItems inFile0 thy'
+      , do accLem <- lemmaAcc workDir
            let tests = mapMaybe (flip lookupCaseTest $ thy) (get aCaseIdentifiers accLem)
            thy' <- liftedAddAccLemma thy (defineCaseTests accLem tests)
            addItems inFile0 fileArgs thy'

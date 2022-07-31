@@ -39,9 +39,6 @@ module Main.Console (
   , findArg
   , argExists
 
-  -- ** Utility Functions
-  , getOutputModule
-
   -- * Pretty printing and console output
   , lineWidth
   , shortLineWidth
@@ -155,20 +152,6 @@ updateArg a v = Right . addArg a v
 -- | Add the help flag.
 helpFlag :: Flag Arguments
 helpFlag = flagHelpSimple (addEmptyArg "help")
-
-------------------------------------------------------------------------------
--- Utility Functions
-------------------------------------------------------------------------------
-
-getOutputModule ::  Arguments -> ModuleType 
-getOutputModule as
-     | Nothing <-  findArg "outModule" as = ModuleSpthy -- default
-     | Just string <-  findArg "outModule" as
-     , Just modCon <- find (\x -> show x  == string) (enumFrom minBound)
-      = modCon
-     | otherwise = error "output mode not supported."
-
-
 
 ------------------------------------------------------------------------------
 -- Modes for using the Tamarin prover
