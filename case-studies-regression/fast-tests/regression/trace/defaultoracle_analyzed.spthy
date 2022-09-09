@@ -1,0 +1,43 @@
+theory DefaultOracle begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1[destructor], pair/2, snd/1[destructor]
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+heuristic: o "defaultoracle.oracle"
+
+rule (modulo E) Rule:
+   [ ] --[ A( ) ]-> [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma Test [heuristic=o "defaultoracle.oracle"]:
+  exists-trace "∃ #i. A( ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ #i. (A( ) @ #i)"
+*/
+simplify
+SOLVED // trace found
+
+/* All wellformedness checks were successful. */
+
+end
+/* Output
+maude tool: 'maude'
+ checking version: 3.2.1. OK.
+ checking installation: OK.
+
+==============================================================================
+summary of summaries:
+
+analyzed: examples/regression/trace/defaultoracle.spthy
+
+  output:          examples/regression/trace/defaultoracle.spthy.tmp
+  processing time: 0.057367473s
+  
+  Test (exists-trace): verified (2 steps)
+
+==============================================================================
+*/
