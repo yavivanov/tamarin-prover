@@ -1,0 +1,12 @@
+theory DefaultOracle
+begin
+
+heuristic: o
+rule Rule:
+  []--[A()]->[]
+
+lemma Test [heuristic=o]:
+  exists-trace
+  " Ex #i. A()@i"
+
+end

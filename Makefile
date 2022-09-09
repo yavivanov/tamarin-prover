@@ -405,9 +405,11 @@ REGRESSION_TARGETS=$(subst .spthy,_analyzed.spthy,$(addprefix case-studies$(SUBD
 SEQDFS_CASE_STUDIES=seqdfsneeded.spthy
 SEQDFS_TARGETS=$(subst .spthy,_analyzed-seqdfs.spthy,$(addprefix case-studies$(SUBDIR)regression/trace/,$(SEQDFS_CASE_STUDIES)))
 
+DEFAULTORACLE_CASE_STUDIES=defaultoracle.spthy
+DEFAULTORACLE_CASE_TARGETS=$(subst .spthy,_analyzed.spthy, $(addprefix case-studies$(SUBDIR)regression/trace/,$(DEFAULTORACLE_CASE_STUDIES)))
 
 # case studies
-regression-case-studies:	$(REGRESSION_TARGETS) $(SEQDFS_TARGETS)
+regression-case-studies:	$(REGRESSION_TARGETS) $(SEQDFS_TARGETS) $(DEFAULTORACLE_CASE_TARGETS)
 	grep "verified\|falsified\|processing time" case-studies$(SUBDIR)regression/trace/*.spthy
 
 
@@ -465,7 +467,7 @@ case-studies: 	case-studies$(SUBDIR)system.info $(CS_TARGETS)
 ## Fast case studies
 ####################
 
-FAST_CS_TARGETS = case-studies$(SUBDIR)Tutorial_analyzed.spthy $(CCS15_PCS_TARGETS) $(TESTOBSEQ_TARGETS) $(FEATURES_CS_TARGETS) $(REGRESSION_OBSEQ_TARGETS) $(CSF12_CS_TARGETS) $(IND_CS_TARGETS) $(CCS15_CS_TARGETS) $(XOR_TRACE_TARGETS) $(XOR_DIFF_OBSEQONLY_TARGETS) $(POST17_TRACE_TARGETS) $(CLASSIC_CS_TARGETS) $(AKE_BP_CS_TARGETS) $(SEQDFS_TARGETS)
+FAST_CS_TARGETS = case-studies$(SUBDIR)Tutorial_analyzed.spthy $(CCS15_PCS_TARGETS) $(TESTOBSEQ_TARGETS) $(FEATURES_CS_TARGETS) $(REGRESSION_OBSEQ_TARGETS) $(CSF12_CS_TARGETS) $(IND_CS_TARGETS) $(CCS15_CS_TARGETS) $(XOR_TRACE_TARGETS) $(XOR_DIFF_OBSEQONLY_TARGETS) $(POST17_TRACE_TARGETS) $(CLASSIC_CS_TARGETS) $(AKE_BP_CS_TARGETS) $(DEFAULTORACLE_CASE_TARGETS) #$(SEQDFS_TARGETS)
 
 fast-case-studies: case-studies$(SUBDIR)system.info $(FAST_CS_TARGETS)
 	mkdir -p case-studies$(SUBDIR)
