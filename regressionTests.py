@@ -241,23 +241,25 @@ def main():
 			logging.warning("\n" + "="*80 + "\n")
 			logging.warning(color(colors.BOLD, f"This is repetition number {r+1}\n"))
 
-
+	try:
 		## make case-studies ##
 		if not settings.no_make:
-			cases = "case-studies" if settings.slow else "fast-case-studies FAST=y"
-			command = f"make -j {settings.jobs} {cases} 2>/dev/null"
-			logging.warning(f"running '{command}' ...")
-			output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT).decode("utf-8")
-			logging.debug(output)
-
+		    cases = "case-studies" if settings.slow else "fast-case-studies FAST=y"
+		    command = f"make -j {settings.jobs} {cases} 2>/dev/null"
+		    logging.warning(f"running '{command}' ...")
+		    output = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT).decode("utf-8")
+		    logging.debug(output)
+			
 		## compare time and steps ##
 		successful = compare() & successful
 
 	## measure time ##
-	logging.warning(f"\nTime elapsed: {str(datetime.datetime.now() - startTime).split('.')[0]}s")
-	if not successful:
-		exit(1)
-	exit(0)
+		logging.warning(f"\nTime elapsed: {str(datetime.datetime.now() - startTime).split('.')[0]}s")
+		if not successful:
+			exit(1)
+		exit(0)
+	except CalledProcessError as e:
+	  print(e)
 
 if __name__ == '__main__':
 	main()
