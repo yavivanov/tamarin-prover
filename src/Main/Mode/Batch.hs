@@ -38,6 +38,7 @@ import Theory.Tools.Wellformedness (prettyWfErrorReport)
 import qualified Data.Label as L
 import Data.Bifunctor
 
+
 -- | Batch processing mode.
 batchMode :: TamarinMode
 batchMode = tamarinMode
@@ -82,14 +83,15 @@ run :: TamarinMode -> Arguments -> IO ()
 run thisMode as
   | null inFiles = helpAndExit thisMode (Just "no input files given")
   | argExists "parseOnly" as || argExists "outModule" as = do
-      res <- mapM processThy inFiles
+
+      res <- mapM (processThy "") inFiles
       let (thys, _) = unzip res
 
       mapM_ (putStrLn . renderDoc) thys
       putStrLn ""
   | otherwise = do
-      _ <- ensureMaude as
-      res <- mapM (timed . processThy) inFiles
+      versionData <- ensureMaudeAndGetVersion as
+      res <- mapM (timed . processThy versionData) inFiles
       let (thys, times) = unzip res
       let (docs, reps) = unzip thys
 
@@ -109,6 +111,7 @@ run thisMode as
 
         mapM_ (putStrLn . renderDoc) docs
         putStrLn $ renderDoc $ ppSummary summary
+
   where
     ppSummary summary = Pretty.vcat [ Pretty.text $ ""
                                     , Pretty.text $ replicate 78 '='
@@ -162,8 +165,9 @@ run thisMode as
 
     -- theory processing functions
     ------------------------------
-    processThy :: FilePath -> IO (Pretty.Doc, Pretty.Doc)
-    processThy inFile = either handleError return <=< runExceptT $ do
+
+    processThy :: String -> FilePath -> IO (Pretty.Doc, Pretty.Doc)
+    processThy versionData inFile = either handleError return <=< runExceptT $ do
       srcThy <- liftIO $ readFile inFile
       thy    <- loadTheory thyLoadOptions srcThy inFile
 
@@ -174,9 +178,10 @@ run thisMode as
         let sig = either (\(t,_) -> get thySignature t) (\(d,_) -> get diffThySignature d) thy
         sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath thyLoadOptions) sig
 
-        (report, thy') <- closeTheory (updatedThyLoadOptions $ either snd snd thy) inFile sig' (bimap fst fst thy)
+        (report, thy') <- closeTheory versionData (updatedThyLoadOptions $ either snd snd thy) inFile sig' (bimap fst fst thy)
         either (\t -> return (prettyClosedTheory t,     ppWf report Pretty.$--$ prettyClosedSummary t))
                (\d -> return (prettyClosedDiffTheory d, ppWf report Pretty.$--$ prettyClosedDiffSummary d)) thy'
+               
       where
         isParseOnlyMode = get oParseOnlyMode thyLoadOptions
 
