@@ -428,22 +428,22 @@ constructAutoProver thyOpts =
 -----------------------------------------------
 
 -- | Add parameters in the OpenTheory, here openchain and saturation in the options
-addParamsOptions :: TheoryLoadOptions -> Either OpenTheory OpenDiffTheory -> Either OpenTheory OpenDiffTheory
+addParamsOptions :: TheoryLoadOptions -> Either (OpenTheory, String) (OpenDiffTheory, String) -> Either (OpenTheory, String) (OpenDiffTheory, String)
 addParamsOptions opt = addSatArg . addChainsArg . addLemmaToProve
 
     where
       -- Add Open Chain Limit parameters in the Options
       chain = L.get oOpenChain opt
-      addChainsArg (Left thy) = Left $ set (openChainsLimit.thyOptions) chain thy
-      addChainsArg (Right diffThy) = Right $ set (openChainsLimit.diffThyOptions) chain diffThy
+      addChainsArg (Left (thy, as)) = Left (set (openChainsLimit.thyOptions) chain thy, as)
+      addChainsArg (Right (diffThy, as)) = Right (set (openChainsLimit.diffThyOptions) chain diffThy, as)
       -- Add Saturation Limit parameters in the Options
       sat = L.get oSaturation opt
-      addSatArg (Left thy) = Left $ set (saturationLimit.thyOptions) sat thy
-      addSatArg (Right diffThy) = Right $ set (saturationLimit.diffThyOptions) sat diffThy
+      addSatArg (Left (thy, as)) = Left (set (saturationLimit.thyOptions) sat thy, as)
+      addSatArg (Right (diffThy, as)) = Right (set (saturationLimit.diffThyOptions) sat diffThy, as)
       -- Add lemmas to Prove in the Options
       lem = L.get oLemmaNames opt
-      addLemmaToProve (Left thy) = Left $ set (lemmasToProve.thyOptions) lem thy
-      addLemmaToProve (Right diffThy) = Right $ set (lemmasToProve.diffThyOptions) lem diffThy
+      addLemmaToProve (Left (thy, as)) = Left (set (lemmasToProve.thyOptions) lem thy, as)
+      addLemmaToProve (Right (diffThy, as)) = Right (set (lemmasToProve.diffThyOptions) lem diffThy, as)
 
 
 ------------------------------------------------------------------------------
