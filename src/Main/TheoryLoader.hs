@@ -201,7 +201,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
     proveMode  = return $ argExists "prove" as
     lemmaNames = return $ findArg "prove" as ++ findArg "lemma" as
 
-    stopOnTrace = case map toLower <$> findArg "stop-on-trace" as of
+    stopOnTrace = case map toLower <$> findArg "stopOnTrace" as of
       Nothing       -> return CutDFS
       Just "dfs"    -> return CutDFS
       Just "none"   -> return CutNothing
