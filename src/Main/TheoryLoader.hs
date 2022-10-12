@@ -263,7 +263,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
      | otherwise   = throwError $ ArgumentError "output mode not supported."
 
     -- NOTE: Output mode implicitly activates parse-only mode
-    parseOnlyMode = return $ argExists "parseOnly" as || argExists "outputMode" as
+    parseOnlyMode = return $ argExists "parseOnly" as || argExists "outModule" as
 
     oracleName = return $ argExists "oraclename" as && getArg "oraclename" as /= ""
     chain = findArg "OpenChainsLimit" as
