@@ -173,7 +173,7 @@ loadTheories thOpts readyMsg thDir thLoad thClose autoProver = do
         openThy <- thLoad srcThy path
         let sig = either (L.get thySignature) (L.get diffThySignature) (bimap fst fst openThy)
         sig' <- liftIO $ toSignatureWithMaude (L.get oMaudePath thOpts) sig
-        thClose path sig' (bimap fst fst openThy)
+        thClose sig' (bimap fst fst openThy)
 
       case result of
         Left (ParserError e) -> do

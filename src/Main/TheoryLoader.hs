@@ -382,7 +382,7 @@ closeTheory version thyOpts sig srcThy = do
       where
         thyOpts' = case L.get oHeuristic thyOpts of
           Nothing -> thyOpts
-          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName inFile) grs) thyOpts
+          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName (either (L.get thyInFile) (L.get diffThyInFile) srcThy)) grs) thyOpts
 
 
 

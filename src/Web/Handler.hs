@@ -494,12 +494,12 @@ postRootR = do
           else do
             yesod <- getYesod
             thyWithRep <- liftIO $ runExceptT $ do
-              openThy <- loadThy yesod (T.unpack $ T.decodeUtf8 $ BS.concat content)
+              openThy <- loadThy yesod (T.unpack $ T.decodeUtf8 $ BS.concat content) (T.unpack $ fileName fileinfo)
 
               let sig = either (get thySignature) (get diffThySignature) $ bimap fst fst openThy
               sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath (thyOpts yesod)) sig
 
-              closeThy yesod (T.unpack $ fileName fileinfo) sig' $ bimap fst fst openThy
+              closeThy yesod sig' $ bimap fst fst openThy
 
             case thyWithRep of
               Left err -> setMessage $ "Theory loading failed:\n" <> toHtml (show err)
