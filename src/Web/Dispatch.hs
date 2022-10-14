@@ -89,9 +89,9 @@ withWebUI :: String                          -- ^ Message to output once the sev
           -> Bool                            -- ^ Load last proof state if present
           -> Bool                            -- ^ Automatically save proof state
           -> TheoryLoadOptions               -- ^ Options for loading theories
-          -> (String -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
+          -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
           -- ^ Theory loader (from string).
-          -> (FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+          -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
           -- ^ Theory closer.
           -> Bool                            -- ^ Show debugging messages?
           -> (String, FilePath)              -- ^ Path to graph rendering binary (dot or json)
