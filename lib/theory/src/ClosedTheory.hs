@@ -115,10 +115,10 @@ getProofContext l thy = ProofContext
 
     -- Heuristic specified for the lemma > globally specified heuristic > default heuristic
     specifiedHeuristic = case lattr of
-        Just lh -> Just lh
+        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get thyInFile thy)) grl))
         Nothing  -> case L.get thyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic gh)
+                    gh -> Just (Heuristic (map (defaultOracleName (L.get thyInFile thy)) gh))
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
@@ -392,6 +392,7 @@ prettyClosedDiffTheory thy = if containsManualRuleVariantsDiff mergedRules
        map (mapDiffTheoryItem id (\(x, y) -> (x, (openProtoRule y))) id id) items
     thy' :: DiffTheory SignatureWithMaude ClosedRuleCache DiffProtoRule OpenProtoRule IncrementalDiffProof IncrementalProof
     thy' = DiffTheory {_diffThyName=(L.get diffThyName thy)
+            ,_diffThyInFile=(L.get diffThyInFile thy)
             ,_diffThyHeuristic=(L.get diffThyHeuristic thy)
             ,_diffThySignature=(L.get diffThySignature thy)
             ,_diffThyCacheLeft=(L.get diffThyCacheLeft thy)

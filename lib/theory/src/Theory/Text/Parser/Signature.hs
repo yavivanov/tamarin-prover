@@ -45,7 +45,6 @@ import Data.Label.Total
 import Data.Label.Mono (Lens)
 import Theory.Sapic
 import qualified Data.Functor
-import Data.Maybe (isNothing, fromMaybe)
 
 
  -- Describes the mapping between Maude Signatures and the builtin Name
@@ -216,18 +215,17 @@ export thy = do
                     '"'  -> mzero
                     _    -> return c
 
-heuristic :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser [GoalRanking]
-heuristic inFile diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking (Just $ takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse $ fromMaybe "" inFile) ++ ".oracle") diff workDir) <* lexeme spaces
+heuristic :: Bool -> Maybe FilePath -> Parser [GoalRanking]
+heuristic diff workDir = symbol "heuristic" *> char ':' *> skipMany (char ' ') *> many1 (goalRanking diff workDir) <* lexeme spaces
 
-goalRanking :: Maybe FilePath -> Bool -> Maybe FilePath -> Parser GoalRanking
-goalRanking inFile diff workDir = try oracleRanking <|> regularRanking <?> "goal ranking"
+goalRanking :: Bool -> Maybe FilePath -> Parser GoalRanking
+goalRanking diff workDir = try oracleRanking <|> regularRanking <?> "goal ranking"
    where
        regularRanking = toGoalRanking <$> letter <* skipMany (char ' ')
 
        oracleRanking = do
            goal <- toGoalRanking <$> oneOf "oO" <* skipMany (char ' ')
-           relPath' <- optionMaybe (char '"' *> many1 (noneOf "\"\n\r") <* char '"' <* skipMany (char ' '))
-           let relPath = if isNothing relPath' then inFile else relPath'
+           relPath <- optionMaybe (char '"' *> many1 (noneOf "\"\n\r") <* char '"' <* skipMany (char ' '))
            return $ mapOracleRanking (maybeSetOracleRelPath relPath . maybeSetOracleWorkDir workDir) goal
 
        toGoalRanking = if diff then charToGoalRankingDiff else charToGoalRanking

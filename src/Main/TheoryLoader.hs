@@ -166,7 +166,6 @@ data TheoryLoadOptions = TheoryLoadOptions {
   , _oOutputModule      :: Maybe ModuleType -- Note: This flag is only used for batch mode.
   , _oMaudePath         :: FilePath -- FIXME: Other functions defined in Environment.hs
   , _oParseOnlyMode     :: Bool
-  , _oOracleName        :: Bool
   , _oOpenChain         :: Integer
   , _oSaturation        :: Integer
 } deriving Show
@@ -187,7 +186,6 @@ defaultTheoryLoadOptions = TheoryLoadOptions {
   , _oOutputModule      = Nothing
   , _oMaudePath         = "maude"
   , _oParseOnlyMode     = False
-  , _oOracleName        = False
   , _oOpenChain         = 10
   , _oSaturation        = 5
 }
@@ -214,9 +212,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                          <*> autoSources
                          <*> outputModule
                          <*> (return $ maudePath as)
-                         <*> parseOnlyMode
-                         <*> oracleName
-                         <*> openchain
+                         <*> parseOnlyMode                         <*> openchain
                          <*> saturation
   where
     proveMode  = return $ argExists "prove" as
@@ -265,7 +261,6 @@ mkTheoryLoadOptions as = TheoryLoadOptions
     -- NOTE: Output mode implicitly activates parse-only mode
     parseOnlyMode = return $ argExists "parseOnly" as || argExists "outModule" as
 
-    oracleName = return $ argExists "oraclename" as && getArg "oraclename" as /= ""
     chain = findArg "OpenChainsLimit" as
     chainDefault = L.get oOpenChain defaultTheoryLoadOptions
     openchain = if not (null chain) 
@@ -389,13 +384,7 @@ closeTheory version thyOpts inFile sig srcThy = do
       where
         thyOpts' = case L.get oHeuristic thyOpts of
           Nothing -> thyOpts
-          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map defaultOracleName grs) thyOpts
-        defaultOracleName heur = case heur of 
-          OracleSmartRanking (Oracle "" "") -> OracleSmartRanking $ Oracle "." $ inFileOracle inFile
-          OracleRanking  (Oracle "" "") -> OracleSmartRanking $ Oracle "." $ inFileOracle inFile
-          h -> h
-          where
-            inFileOracle inFile0 = takeWhile ('.' /= ) inFile0  ++ ".oracle"
+          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName inFile) grs) thyOpts
 
 
 

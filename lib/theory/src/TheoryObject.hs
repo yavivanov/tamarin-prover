@@ -16,11 +16,13 @@ module TheoryObject (
   , TheoryItem(..)
   , DiffTheoryItem(..)
   , thyName
+  , thyInFile
   , thySignature
   , thyCache
   , thyItems
   , thyOptions
   , diffThyName
+  , diffThyInFile
   , diffThyItems
   , diffThySignature
   , diffThyCacheLeft
@@ -163,6 +165,7 @@ import Items.CaseTestItem (prettyCaseTest)
 -- and the lemmas that
 data Theory sig c r p s = Theory {
          _thyName      :: String
+       , _thyInFile    :: String  
        , _thyHeuristic :: [GoalRanking]
        , _thySignature :: sig
        , _thyCache     :: c
@@ -177,6 +180,7 @@ $(mkLabels [''Theory])
 -- | A diff theory contains a set of rewriting rules with diff modeling two instances
 data DiffTheory sig c r r2 p p2 = DiffTheory {
          _diffThyName           :: String
+       , _diffThyInFile         :: String
        , _diffThyHeuristic      :: [GoalRanking]
        , _diffThySignature      :: sig
        , _diffThyCacheLeft      :: c
@@ -478,11 +482,11 @@ addDiffLemma l thy = do
 
 -- | Add a new default heuristic. Fails if a heuristic is already defined.
 addHeuristic :: [GoalRanking] -> Theory sig c r p s -> Maybe (Theory sig c r p s)
-addHeuristic h (Theory n [] sig c i o) = Just (Theory n h sig c i o)
+addHeuristic h (Theory n f [] sig c i o) = Just (Theory n f h sig c i o)
 addHeuristic _ _ = Nothing
 
 addDiffHeuristic :: [GoalRanking] -> DiffTheory sig c r r2 p p2 -> Maybe (DiffTheory sig c r r2 p p2)
-addDiffHeuristic h (DiffTheory n [] sig cl cr dcl dcr i opt) = Just (DiffTheory n h sig cl cr dcl dcr i opt)
+addDiffHeuristic h (DiffTheory n f [] sig cl cr dcl dcr i opt) = Just (DiffTheory n f h sig cl cr dcl dcr i opt)
 addDiffHeuristic _ _ = Nothing
 
 -- | Remove a lemma by name. Fails, if the lemma does not exist.

@@ -51,8 +51,6 @@ import Theory.Text.Parser.Exceptions
 import Theory.Text.Parser.Signature
 import Theory.Text.Parser.Restriction
 import Theory.Text.Parser.Sapic
-import qualified Data.List as L
-import System.Process (callCommand)
 
 ------------------------------------------------------------------------------
 -- Lexing and parsing theory files and proof methods
@@ -83,7 +81,7 @@ parseOpenDiffTheoryString flags0 = parseString flags0 "<unknown source>" (diffTh
 
 -- | Parse a lemma for an open theory from a string.
 parseLemma :: String -> Either ParseError (SyntacticLemma ProofSkeleton)
-parseLemma = parseString [] "<unknown source>" (lemma Nothing Nothing)
+parseLemma = parseString [] "<unknown source>" (lemma Nothing)
 
 ------------------------------------------------------------------------------
 -- Parsing Theories
@@ -130,8 +128,8 @@ liftedAddLemma thy lem = do
                                          -- ++ get lName lem
                                          -- ++ "."
 
-liftedAddAccLemma :: Catch.MonadThrow m =>
-                     Theory sig c r p TranslationElement
+liftedAddAccLemma :: Catch.MonadThrow m => 
+                     Theory sig c r p TranslationElement 
                      -> AccLemma -> m (Theory sig c r p TranslationElement)
 liftedAddAccLemma thy lem =
    liftMaybeToEx (DuplicateItem $ TranslationItem $ AccLemmaItem lem) (addAccLemma lem thy)
@@ -201,6 +199,7 @@ evalformula flags0 (FNot t) = not (evalformula flags0 t)
 evalformula flags0 (FOr t1 t2) = (evalformula flags0 t1) || (evalformula flags0 t2)
 evalformula flags0 (FAnd t1 t2) = (evalformula flags0 t1) && (evalformula flags0 t2)
 
+-- | Parse a theory.
 theory :: Maybe FilePath
        -> Parser (OpenTheory, String)
 theory inFile = do
@@ -213,13 +212,13 @@ theory inFile = do
     if block == "configuration"
         then do
             fileArgs <- stringLiteral <* symbol_ "begin"
-            addItems inFile fileArgs (set thyName thyId defThy) <* symbol_ "end"
+            addItems inFile fileArgs (set thyInFile (fromMaybe "" inFile) $ set thyName thyId defThy) <* symbol_ "end"
         else do
-            addItems inFile "" (set thyName thyId defThy) <* symbol_ "end"
+            addItems inFile "" (set thyInFile (fromMaybe "" inFile) $ set thyName thyId defThy) <* symbol_ "end"
   where
     addItems :: Maybe FilePath -> String -> OpenTheory -> Parser (OpenTheory, String)
     addItems inFile0 fileArgs thy = asum
-      [ do thy' <- liftedAddHeuristic thy =<< heuristic inFile0 False workDir
+      [ do thy' <- liftedAddHeuristic thy =<< heuristic False workDir
            addItems inFile0 fileArgs thy'
       , do thy' <- builtins thy
            msig <- sig <$> getState
@@ -243,11 +242,11 @@ theory inFile = do
       , do test <- caseTest
            thy' <- liftedAddCaseTest thy test
            addItems inFile0 fileArgs thy'
-      , do accLem <- lemmaAcc inFile0 workDir
+      , do accLem <- lemmaAcc workDir
            let tests = mapMaybe (flip lookupCaseTest $ thy) (get aCaseIdentifiers accLem)
            thy' <- liftedAddAccLemma thy (defineCaseTests accLem tests)
            addItems inFile0 fileArgs thy'
-      , do thy' <- liftedAddLemma thy =<< lemma inFile0 workDir
+      , do thy' <- liftedAddLemma thy =<< lemma workDir
            addItems inFile0 fileArgs thy'
       , do ru <- protoRule
            thy' <- liftedAddProtoRule thy ru
@@ -361,7 +360,7 @@ diffTheory inFile = do
   where
     addItems :: Maybe FilePath -> String -> OpenDiffTheory -> Parser (OpenDiffTheory, String)
     addItems inFile0 fileArgs thy = asum
-      [ do thy' <- liftedAddHeuristic thy =<< heuristic inFile0 True workDir
+      [ do thy' <- liftedAddHeuristic thy =<< heuristic True workDir
            addItems inFile0 fileArgs thy'
       , do
            diffbuiltins
@@ -381,9 +380,9 @@ diffTheory inFile = do
       , do thy' <- liftedAddRestriction' thy =<< legacyDiffAxiom
            addItems inFile0 fileArgs thy'
            -- add legacy deprecation warning output
-      , do thy' <- liftedAddLemma' thy =<< plainLemma inFile0 workDir
+      , do thy' <- liftedAddLemma' thy =<< plainLemma workDir
            addItems inFile0 fileArgs thy'
-      , do thy' <- liftedAddDiffLemma thy =<< diffLemma inFile0 workDir
+      , do thy' <- liftedAddDiffLemma thy =<< diffLemma workDir
            addItems inFile0 fileArgs thy'
       , do ru <- diffRule
            thy' <- liftedAddDiffRule thy ru

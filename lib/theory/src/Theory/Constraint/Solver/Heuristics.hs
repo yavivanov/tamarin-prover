@@ -22,6 +22,7 @@ module Theory.Constraint.Solver.Heuristics (
 
   , Oracle(..)
   , defaultOracle
+  , defaultOracleName
   , oraclePath
   , maybeSetOracleWorkDir
   , maybeSetOracleRelPath
@@ -86,9 +87,18 @@ defaultHeuristic :: Bool -> Heuristic
 defaultHeuristic = Heuristic . defaultRankings
 
 
--- Default to "./oracle" in the current working directory.
+-- Default empty oracle.
 defaultOracle :: Oracle
-defaultOracle = Oracle "" ""
+defaultOracle = Oracle "." ""
+
+-- Set the oraclename to ./theory_filename.oracle
+defaultOracleName :: FilePath -> GoalRanking -> GoalRanking
+defaultOracleName inFile heur = case heur of 
+          OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir $ inFileOracle inFile
+          OracleRanking  (Oracle workDir "") -> OracleRanking $ Oracle workDir $ inFileOracle inFile
+          h -> h
+          where
+            inFileOracle inFile0 = (takeWhile ('.' /= ) inFile0)  ++ ".oracle" -- (takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse inFile0)) ++ ".oracle"
 
 maybeSetOracleWorkDir :: Maybe FilePath -> Oracle -> Oracle
 maybeSetOracleWorkDir p o = maybe o (\x -> o{ oracleWorkDir = x }) p

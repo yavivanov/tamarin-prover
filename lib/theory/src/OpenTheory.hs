@@ -36,6 +36,7 @@ import Control.Parallel.Strategies
 removeTranslationItems :: OpenTheory -> OpenTranslatedTheory
 removeTranslationItems thy =
   Theory {_thyName=(L.get thyName thy)
+          ,_thyInFile=(L.get thyInFile thy)
           ,_thyHeuristic=(L.get thyHeuristic thy)
           ,_thySignature=(L.get thySignature thy)
           ,_thyCache=(L.get thyCache thy)
@@ -55,6 +56,7 @@ removeTranslationItems thy =
 openTranslatedTheory :: OpenTranslatedTheory -> OpenTheory
 openTranslatedTheory thy =
   Theory {_thyName=(L.get thyName thy)
+          ,_thyInFile=(L.get thyInFile thy)
           ,_thyHeuristic=(L.get thyHeuristic thy)
           ,_thySignature=(L.get thySignature thy)
           ,_thyCache=(L.get thyCache thy)
@@ -389,11 +391,11 @@ defaultOption = Option False False False False False False False S.empty [] 10 5
 
 -- | Default theory
 defaultOpenTheory :: Bool -> OpenTheory
-defaultOpenTheory flag = Theory "default" [] (emptySignaturePure flag) [] [] defaultOption
+defaultOpenTheory flag = Theory "default" "default" [] (emptySignaturePure flag) [] [] defaultOption
 
 -- | Default diff theory
 defaultOpenDiffTheory :: Bool -> OpenDiffTheory
-defaultOpenDiffTheory flag = DiffTheory "default" [] (emptySignaturePure flag) [] [] [] [] [] defaultOption
+defaultOpenDiffTheory flag = DiffTheory "default" "default" [] (emptySignaturePure flag) [] [] [] [] [] defaultOption
 
 -- Add the default Diff lemma to an Open Diff Theory
 addDefaultDiffLemma:: OpenDiffTheory -> OpenDiffTheory
