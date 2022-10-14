@@ -212,7 +212,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                          <*> autoSources
                          <*> outputModule
                          <*> (return $ maudePath as)
-                         <*> parseOnlyMode                         
+                         <*> parseOnlyMode
                          <*> openchain
                          <*> saturation
   where
@@ -341,7 +341,6 @@ loadTheory thyOpts input inFile = do
 
     withTheory     f t = bitraverse f return t
 
-
 closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
 closeTheory version thyOpts sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
@@ -383,9 +382,6 @@ closeTheory version thyOpts sig srcThy = do
         thyOpts' = case L.get oHeuristic thyOpts of
           Nothing -> thyOpts
           Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName (either (L.get thyInFile) (L.get diffThyInFile) srcThy)) grs) thyOpts
-
-
-
 
     diffProver | L.get oProveMode thyOpts = replaceDiffSorryProver $ runAutoDiffProver $ constructAutoProver thyOpts
                | otherwise                = mempty
