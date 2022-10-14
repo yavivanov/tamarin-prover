@@ -89,7 +89,7 @@ withWebUI :: String                          -- ^ Message to output once the sev
           -> Bool                            -- ^ Load last proof state if present
           -> Bool                            -- ^ Automatically save proof state
           -> TheoryLoadOptions               -- ^ Options for loading theories
-          -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
+          -> (String -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
           -- ^ Theory loader (from string).
           -> (FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
           -- ^ Theory closer.
@@ -157,7 +157,7 @@ loadTheories :: TheoryLoadOptions
              -> String
              -> FilePath
              -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))
-             -> (FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+             -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
              -> AutoProver
              -> IO TheoryMap
 loadTheories thOpts readyMsg thDir thLoad thClose autoProver = do

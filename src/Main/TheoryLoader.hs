@@ -212,7 +212,8 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                          <*> autoSources
                          <*> outputModule
                          <*> (return $ maudePath as)
-                         <*> parseOnlyMode                         <*> openchain
+                         <*> parseOnlyMode                         
+                         <*> openchain
                          <*> saturation
   where
     proveMode  = return $ argExists "prove" as
@@ -329,9 +330,6 @@ loadTheory thyOpts input inFile = do
       sthy <- Sapic.translate tthy
       athy <- Acc.translate sthy
       return (athy, confOpts)
-      -- Sapic.typeTheory
-                              -- >=> Sapic.translate
-                              -- >=> Acc.translate
 
     isDiffMode      = L.get oDiffMode thyOpts
     isParseOnlyMode = L.get oParseOnlyMode thyOpts
@@ -344,8 +342,8 @@ loadTheory thyOpts input inFile = do
     withTheory     f t = bitraverse f return t
 
 
-closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> FilePath -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
-closeTheory version thyOpts inFile sig srcThy = do
+closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+closeTheory version thyOpts sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
                          (const []) srcThy
 

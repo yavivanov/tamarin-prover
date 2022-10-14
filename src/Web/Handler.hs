@@ -494,7 +494,7 @@ postRootR = do
           else do
             yesod <- getYesod
             thyWithRep <- liftIO $ runExceptT $ do
-              openThy <- loadThy yesod (T.unpack $ T.decodeUtf8 $ BS.concat content) (T.unpack $ fileName fileinfo)
+              openThy <- loadThy yesod (T.unpack $ T.decodeUtf8 $ BS.concat content)
 
               let sig = either (get thySignature) (get diffThySignature) $ bimap fst fst openThy
               sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath (thyOpts yesod)) sig

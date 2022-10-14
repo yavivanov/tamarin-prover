@@ -98,7 +98,7 @@ defaultOracleName inFile heur = case heur of
           OracleRanking  (Oracle workDir "") -> OracleRanking $ Oracle workDir $ inFileOracle inFile
           h -> h
           where
-            inFileOracle inFile0 = (takeWhile ('.' /= ) inFile0)  ++ ".oracle" -- (takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse inFile0)) ++ ".oracle"
+            inFileOracle inFile0 = (takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse inFile0)) ++ ".oracle"
 
 maybeSetOracleWorkDir :: Maybe FilePath -> Oracle -> Oracle
 maybeSetOracleWorkDir p o = maybe o (\x -> o{ oracleWorkDir = x }) p
