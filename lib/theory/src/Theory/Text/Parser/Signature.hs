@@ -228,7 +228,7 @@ goalRanking diff workDir = try oracleRanking <|> regularRanking <?> "goal rankin
            relPath <- optionMaybe (char '"' *> many1 (noneOf "\"\n\r") <* char '"' <* skipMany (char ' '))
 
            return $ mapOracleRanking (maybeSetOracleRelPath relPath . maybeSetOracleWorkDir workDir) goal
-       
+
        toGoalRanking = if diff then charToGoalRankingDiff else charToGoalRanking
 
 
