@@ -35,7 +35,6 @@ import           Theory.Module
 import           Control.Monad.Except (MonadIO(liftIO), runExceptT)
 import           System.Exit (die)
 import Theory.Tools.Wellformedness (prettyWfErrorReport)
-import Data.Bifunctor
 
 
 -- | Batch processing mode.

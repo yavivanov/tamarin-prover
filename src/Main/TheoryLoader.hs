@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE BlockArguments #-}
 
 -- |
 -- Copyright   : (c) 2010, 2011 Benedikt Schmidt & Simon Meier
@@ -48,8 +47,8 @@ import           Prelude                             hiding (id, (.))
 
 import           Data.Char                           (toLower)
 import           Data.Label
-import           Data.List                           (isPrefixOf,intersperse, find, isInfixOf)
-import           Data.Map                            (keys, member)
+import           Data.List                           (isPrefixOf,intersperse, find)
+import           Data.Map                            (keys)
 import           Data.FileEmbed                      (embedFile)
 
 import           Control.Category
@@ -91,15 +90,21 @@ import Data.Maybe (fromMaybe)
 -- Theory loading: shared between interactive and batch mode
 ------------------------------------------------------------------------------
 
--- | Flags for loading a theory (either command line or from a configuration).
+-----------------------------------------------
+-- Flags
+-----------------------------------------------
+
+-- | Flags for loading a theory.
 theoryLoadFlags :: [Flag Arguments]
 theoryLoadFlags =
-
   [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
       "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
 
   , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
       "Select lemma(s) by name or prefx (can be repeated)"
+
+  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
+      "How to search for traces (default DFS)"
 
   , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
       "Bound the depth of the proofs"
@@ -121,6 +126,9 @@ theoryLoadFlags =
   , flagNone ["quit-on-warning"] (addEmptyArg "quit-on-warning")
       "Strict mode that quits on any warning that is emitted"
 
+  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
+      "Try to auto-generate sources lemmas"
+
   , flagOpt "" ["oraclename"] (updateArg "oraclename") "FILE"
       ("Path to the oracle heuristic (default '" ++ "theory_filename.oracle" ++ "')")
 
@@ -129,12 +137,6 @@ theoryLoadFlags =
 
   , flagOpt "5" ["saturation","s"] (updateArg "SaturationLimit" ) "PositiveInteger"
       "Limits the number of saturations during precomputations (default 5)"
-
-  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
-      "How to search for traces (default DFS)"
-
-  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
-      "Try to auto-generate sources lemmas"
 
 --  , flagOpt "" ["diff"] (updateArg "diff") "OFF|ON"
 --      "Turn on observational equivalence (default OFF)."
@@ -318,6 +320,7 @@ loadTheory thyOpts input inFile = do
               | otherwise       = Sapic.typeTheory
                               >=> Sapic.translate
                               >=> Acc.translate
+
     isDiffMode      = L.get oDiffMode thyOpts
     isParseOnlyMode = L.get oParseOnlyMode thyOpts
 
@@ -363,10 +366,10 @@ closeTheory version thyOpts' sig srcThy = do
     partialStyle  = L.get oPartialEvaluation thyOpts
     quitOnWarning = L.get oQuitOnWarning thyOpts
 
-    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts'
+    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOptsDefOracle
            | otherwise                = mempty
       where
-        thyOpts' = case L.get oHeuristic thyOpts of
+        thyOptsDefOracle = case L.get oHeuristic thyOpts of
           Nothing -> thyOpts
           Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName (either (L.get thyInFile) (L.get diffThyInFile) srcThy)) grs) thyOpts
 
@@ -383,14 +386,14 @@ closeTheory version thyOpts' sig srcThy = do
     withDiffTheory f t = bitraverse return f t
 
     -- | Update command line arguments with arguments taken from the configuration block.
-    
+
     thyOpts = updateOptsWithConfFlags thyOpts' srcThy
 
-    updateOptsWithConfFlags thyOpts thy = replaceDefaultsWithConfigArgs thyOpts $ thyConfigBlockArgs thy 
+    updateOptsWithConfFlags thyOpts thy = replaceDefaultsWithConfigArgs thyOpts $ thyConfigBlockArgs thy
     thyConfigBlockArgs thy = argsConfString (case thy of
             Left thy0 -> head $ thyConfigBlock (L.get thyItems thy0)
             Right diffThy0 -> head $ diffThyConfigBlock (L.get diffThyItems diffThy0))
-      
+
     stopOnTrace args = case map toLower <$> findArg "stop-on-trace" args of
       Nothing       -> CutDFS
       Just "dfs"    -> CutDFS

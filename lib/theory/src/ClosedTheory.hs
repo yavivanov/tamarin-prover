@@ -163,10 +163,10 @@ getProofContextDiff s l thy = case s of
       | otherwise                                                        = AvoidInduction
     -- Heuristic specified for the lemma > globally specified heuristic > default heuristic
     specifiedHeuristic = case lattr of
-        Just lh -> Just lh
+        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) grl))
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic gh)
+                    gh -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) gh))
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
@@ -220,10 +220,10 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
 
     specifiedHeuristic = case lattr of
-        Just lh -> Just lh
+        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) grl))
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic gh)
+                    gh -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) gh))
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lDiffAttributes l])
