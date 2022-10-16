@@ -137,7 +137,7 @@ run thisMode as
     thyLoadOptions = case mkTheoryLoadOptions as of
       Left (ArgumentError e) -> error e
       Right opts             -> opts
-    
+
     -- output generation
     --------------------
     writeOutput = argExists "outFile" as || argExists "outDir" as

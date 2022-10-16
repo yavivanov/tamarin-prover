@@ -224,16 +224,16 @@ theory inFile = do
            msig <- sig <$> getState
            addItems inFile0 $ set (sigpMaudeSig . thySignature) msig thy'
       , do thy' <- options thy
-           addItems inFile0 thy'
+           addItems inFile0 thy'      
       , do fs <- functions
            msig <- sig <$> getState
-           let thy' = foldl (flip addFunctionTypingInfo) thy fs in
+           let thy' = foldl (flip addFunctionTypingInfo) thy fs in       
              addItems inFile0 $ set (sigpMaudeSig . thySignature) msig thy'
       , do equations
            msig <- sig <$> getState
            addItems inFile0 $ set (sigpMaudeSig . thySignature) msig thy
 --      , do thy' <- foldM liftedAddProtoRule thy =<< transferProto
---           addItems flags  thy'
+--           addItems flags thy'
       , do thy' <- liftedAddRestriction thy =<< restriction msgvar nodevar
            addItems inFile0 thy'
       , do thy' <- liftedAddRestriction thy =<< legacyAxiom
@@ -256,7 +256,7 @@ theory inFile = do
       , do r <- intrRule
            addItems inFile0 (addIntrRuleACs [r] thy)
       , do c <- formalComment
-           addItems inFile0 (addFormalComment c thy)
+           addItems inFile0 (addFormalComment c thy)      
       , do procc <- toplevelprocess thy                          -- try parsing a process
            addItems inFile0 (addProcess procc thy)         -- add process to theoryitems and proceed parsing (recursive addItems call)
       , do thy' <- ((liftedAddProcessDef thy) =<<) (processDef thy)     -- similar to process parsing but in addition check that process with this name is only defined once (checked via liftedAddProcessDef)
@@ -268,12 +268,12 @@ theory inFile = do
            lem <- diffEquivLemma thy
            addItems inFile0 (modify thyItems (++ [TranslationItem lem]) thy)
       , do thy' <- preddeclaration thy
-           addItems inFile0 thy'
+           addItems inFile0 (thy')
       , do thy'  <- export thy
-           addItems inFile0 thy'
+           addItems inFile0 (thy')
       , do ifdef inFile0 thy
       , do define inFile0 thy
-      , do include inFile0 thy
+      , do include inFile0 thy      
       , do return thy
       ]
       where workDir = (takeDirectory <$> inFile0)
@@ -293,7 +293,7 @@ theory inFile = do
       where
         addItems' :: Maybe FilePath -> OpenTheory -> Parser (OpenTheory, ParserState)
         addItems' inFile1 thy1 = do
-             thy' <- addItems inFile1  thy1
+             thy' <- addItems inFile1 thy1
              st <- getState
              return (thy', st)
 
@@ -365,7 +365,7 @@ diffTheory inFile = do
       , do
            diffbuiltins
            msig <- sig <$> getState
-           addItems inFile0 $ set (sigpMaudeSig . diffThySignature) msig thy
+           addItems inFile0 $ set (sigpMaudeSig . diffThySignature) msig thy           
       , do _ <- functions -- typing affects only SAPIC translation, hence functions
                           -- are only added to maude signature, but not to theory.
            msig <- sig <$> getState
@@ -423,7 +423,7 @@ diffTheory inFile = do
              do _ <- manyTill anyChar (try (symbol_ "#"))
                 asum
                  [do (symbol_ "else")
-                     thy' <- addItems inFile0  thy
+                     thy' <- addItems inFile0 thy
                      symbol_ "#endif"
                      addItems inFile0 thy'
                  ,do _ <- symbol_ "endif"
@@ -441,7 +441,7 @@ diffTheory inFile = do
       where
         addItems' :: Maybe FilePath -> OpenDiffTheory -> Parser (OpenDiffTheory, ParserState)
         addItems' inFile1 thy1 = do
-             thy' <- addItems inFile1  thy1
+             thy' <- addItems inFile1 thy1
              st' <- getState
              return (thy', st')
 

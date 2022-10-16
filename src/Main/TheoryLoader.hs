@@ -63,7 +63,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import qualified Sapic as Sapic
-import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal, getArg, addArg)
+import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal, getArg)
 
 import           Main.Environment
 
@@ -314,7 +314,6 @@ loadTheory thyOpts input inFile = do
 
     parse p = parseString (toParserFlags thyOpts) inFile p input
 
-    --translate :: OpenTheory -> ExceptT TheoryLoadError m OpenTheory
     translate | isParseOnlyMode = return
               | otherwise       = Sapic.typeTheory
                               >=> Sapic.translate

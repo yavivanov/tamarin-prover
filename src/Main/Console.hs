@@ -34,7 +34,6 @@ module Main.Console (
   , helpFlag
 
   -- ** Retrieving arguments
-  , addArg
   , getArg
   , findArg
   , argExists

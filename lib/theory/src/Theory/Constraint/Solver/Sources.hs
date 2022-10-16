@@ -189,7 +189,7 @@ solveAllSafeGoals ths' openChainsLimit =
             -- we perform equation splits, if there is a chain goal starting
             -- from a message variable; i.e., a chain constraint that is no
             -- open goal.
-            splitAllowed    = noChainGoals && not (null chains)
+            splitAllowed    = noChainGoals && not (null chains) 
             safeGoals       = fst <$> filter (safeGoal splitAllowed chainsLeft) filteredGoals
             remainingChains ((ChainG _ _):_) = chainsLeft-1
             remainingChains _                = chainsLeft
