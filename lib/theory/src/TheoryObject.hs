@@ -204,37 +204,39 @@ filterSide s l = case l of
 
 -- | Fold a theory item.
 foldTheoryItem
-    :: (r -> a) -> (Restriction -> a) -> (Lemma p -> a) -> (FormalComment -> a) -> (Predicate -> a) -> (s -> a)
+    :: (r -> a) -> (Restriction -> a) -> (Lemma p -> a) -> (FormalComment -> a) -> (ConfigurationBlock -> a) -> (Predicate -> a) -> (s -> a)
     -> TheoryItem r p s -> a
-foldTheoryItem fRule fRestriction fLemma fText fPredicate fTranslationItem i = case i of
+foldTheoryItem fRule fRestriction fLemma fText fConfigBlock fPredicate fTranslationItem i = case i of
     RuleItem ru   -> fRule ru
     LemmaItem lem -> fLemma lem
     TextItem txt  -> fText txt
+    ConfigurationBlockItem b -> fConfigBlock b
     RestrictionItem rstr  -> fRestriction rstr
     PredicateItem     p  -> fPredicate p
     TranslationItem s -> fTranslationItem s
 
 -- | Fold a theory item.
 foldDiffTheoryItem
-    :: (r -> a) -> ((Side, r2) -> a) -> (DiffLemma p -> a) -> ((Side, Lemma p2) -> a) -> ((Side, Restriction) -> a) -> (FormalComment -> a)
+    :: (r -> a) -> ((Side, r2) -> a) -> (DiffLemma p -> a) -> ((Side, Lemma p2) -> a) -> ((Side, Restriction) -> a) -> (FormalComment -> a) -> (ConfigurationBlock -> a)
     -> DiffTheoryItem r r2 p p2 -> a
-foldDiffTheoryItem fDiffRule fEitherRule fDiffLemma fEitherLemma fRestriction fText i = case i of
+foldDiffTheoryItem fDiffRule fEitherRule fDiffLemma fEitherLemma fRestriction fText fConfigBlock i = case i of
     DiffRuleItem ru   -> fDiffRule ru
     EitherRuleItem (side, ru) -> fEitherRule (side, ru)
     DiffLemmaItem lem -> fDiffLemma lem
     EitherLemmaItem (side, lem) -> fEitherLemma (side, lem)
     EitherRestrictionItem (side, rstr)  -> fRestriction (side, rstr)
     DiffTextItem txt  -> fText txt
+    DiffConfigurationBlockItem b -> fConfigBlock b
 
 -- | Map a theory item.
 mapTheoryItem :: (r -> r') -> (p -> p') -> TheoryItem r p s -> TheoryItem r' p' s
 mapTheoryItem f g =
-    foldTheoryItem (RuleItem . f) RestrictionItem (LemmaItem . fmap g) TextItem PredicateItem TranslationItem
+    foldTheoryItem (RuleItem . f) RestrictionItem (LemmaItem . fmap g) TextItem ConfigurationBlockItem PredicateItem TranslationItem
 
 -- | Map a diff theory item.
 mapDiffTheoryItem :: (r -> r') -> ((Side, r2) -> (Side, r2')) -> (DiffLemma p -> DiffLemma p') -> ((Side, Lemma p2) -> (Side, Lemma p2')) -> DiffTheoryItem r r2 p p2 -> DiffTheoryItem r' r2' p' p2'
 mapDiffTheoryItem f g h i =
-    foldDiffTheoryItem (DiffRuleItem . f) (EitherRuleItem . g) (DiffLemmaItem . h) (EitherLemmaItem . i) EitherRestrictionItem DiffTextItem
+    foldDiffTheoryItem (DiffRuleItem . f) (EitherRuleItem . g) (DiffLemmaItem . h) (EitherLemmaItem . i) EitherRestrictionItem DiffTextItem DiffConfigurationBlockItem
 
 -- | Map a process
 mapMProcesses :: Monad m => (PlainProcess -> m(PlainProcess)) -> Theory sig c r p TranslationElement -> m (Theory sig c r p TranslationElement)
@@ -265,41 +267,41 @@ mapMProcessesDef f thy = do
 -- | All rules of a theory.
 theoryRules :: Theory sig c r p s -> [r]
 theoryRules =
-    foldTheoryItem return (const []) (const []) (const []) (const []) (const []) <=< L.get thyItems
+    foldTheoryItem return (const []) (const []) (const []) (const[]) (const []) (const []) <=< L.get thyItems
 
 -- | All diff rules of a theory.
 diffTheoryDiffRules :: DiffTheory sig c r r2 p p2 -> [r]
 diffTheoryDiffRules =
-    foldDiffTheoryItem return (const []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem return (const []) (const []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All rules of a theory.
 diffTheorySideRules :: Side -> DiffTheory sig c r r2 p p2 -> [r2]
 diffTheorySideRules s =
-    foldDiffTheoryItem (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All left rules of a theory.
 leftTheoryRules :: DiffTheory sig c r r2 p p2 -> [r2]
 leftTheoryRules =
-    foldDiffTheoryItem (const []) (\(x, y) -> if (x == LHS) then [y] else []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (\(x, y) -> if (x == LHS) then [y] else []) (const []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All right rules of a theory.
 rightTheoryRules :: DiffTheory sig c r r2 p p2 -> [r2]
 rightTheoryRules =
-    foldDiffTheoryItem (const []) (\(x, y) -> if (x == RHS) then [y] else []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (\(x, y) -> if (x == RHS) then [y] else []) (const []) (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 
 -- | All restrictions of a theory.
 theoryRestrictions :: Theory sig c r p s -> [Restriction]
 theoryRestrictions =
-    foldTheoryItem (const []) return (const []) (const []) (const []) (const []) <=< L.get thyItems
+    foldTheoryItem (const []) return (const []) (const []) (const []) (const []) (const []) <=< L.get thyItems
 
 -- | All lemmas of a theory.
 theoryLemmas :: Theory sig c r p s -> [Lemma p]
 theoryLemmas =
-    foldTheoryItem (const []) (const []) return (const []) (const []) (const []) <=< L.get thyItems
+    foldTheoryItem (const []) (const []) return (const []) (const []) (const []) (const []) <=< L.get thyItems
 
 translationElements :: Theory sig c1 b p c2 -> [c2]
-translationElements = foldTheoryItem (const []) (const []) (const []) (const []) (const []) return <=< L.get thyItems
+translationElements = foldTheoryItem (const []) (const []) (const []) (const []) (const []) (const []) return <=< L.get thyItems
 
 -- | All CaseTest definitions of a theory.
 theoryCaseTests :: Theory sig c r p TranslationElement -> [CaseTest]
@@ -323,7 +325,7 @@ theoryFunctionTypingInfos t = [ i | FunctionTypingInfo i <- translationElements 
 
 -- | All process definitions of a theory.
 theoryPredicates :: Theory sig c r p s -> [Predicate]
-theoryPredicates =  foldTheoryItem (const []) (const []) (const []) (const []) return (const []) <=< L.get thyItems
+theoryPredicates =  foldTheoryItem (const []) (const []) (const []) (const []) (const []) return (const []) <=< L.get thyItems
 
 -- | All export info definitions of a theory.
 theoryExportInfos :: Theory sig c b p TranslationElement -> [ExportInfo]
@@ -344,27 +346,27 @@ theoryDiffEquivLemmas t =  [ p | DiffEquivLemma p <- translationElements t]
 -- | All restrictions of a theory.
 diffTheoryRestrictions :: DiffTheory sig c r r2 p p2 -> [(Side, Restriction)]
 diffTheoryRestrictions =
-    foldDiffTheoryItem (const []) (const []) (const []) (const []) return (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (const []) (const []) (const []) return (const []) (const []) <=< L.get diffThyItems
 
 -- | All restrictions of one side of a theory.
 diffTheorySideRestrictions :: Side -> DiffTheory sig c r r2 p p2 -> [Restriction]
 diffTheorySideRestrictions s =
-    foldDiffTheoryItem (const []) (const []) (const []) (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (const []) (const []) (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All lemmas of a theory.
 diffTheoryLemmas :: DiffTheory sig c r r2 p p2 -> [(Side, Lemma p2)]
 diffTheoryLemmas =
-   foldDiffTheoryItem (const []) (const []) (const []) return (const []) (const []) <=< L.get diffThyItems
+   foldDiffTheoryItem (const []) (const []) (const []) return (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All lemmas of a theory.
 diffTheorySideLemmas :: Side -> DiffTheory sig c r r2 p p2 -> [Lemma p2]
 diffTheorySideLemmas s =
-    foldDiffTheoryItem (const []) (const []) (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (const []) (const []) (\(x, y) -> if (x == s) then [y] else []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | All lemmas of a theory.
 diffTheoryDiffLemmas :: DiffTheory sig c r r2 p p2 -> [DiffLemma p]
 diffTheoryDiffLemmas =
-    foldDiffTheoryItem (const []) (const []) return (const []) (const []) (const []) <=< L.get diffThyItems
+    foldDiffTheoryItem (const []) (const []) return (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 
 expandRestriction :: Theory sig c r p s -> ProtoRestriction SyntacticLNFormula
@@ -464,6 +466,7 @@ filterLemma lemmaSelector = modify thyItems (concatMap fItem)
                              (return . RestrictionItem)
                              check
                              (return . TextItem)
+                             (return . ConfigurationBlockItem)
                              (return . PredicateItem)
                              (return . TranslationItem)
     check l = do guard (lemmaSelector l); return (LemmaItem l)
@@ -499,6 +502,7 @@ removeLemma lemmaName thy = do
                              (return . RestrictionItem)
                              check
                              (return . TextItem)
+                             (return . ConfigurationBlockItem)
                              (return . PredicateItem)
                              (return . TranslationItem)
     check l = do guard (L.get lName l /= lemmaName); return (LemmaItem l)
@@ -515,6 +519,7 @@ removeLemmaDiff s lemmaName thy = do
                                  check
                                  (return . EitherRestrictionItem)
                                  (return . DiffTextItem)
+                                 (return . DiffConfigurationBlockItem)
     check (s', l) = do guard (L.get lName l /= lemmaName || s'/=s); return (EitherLemmaItem (s, l))
 
 -- | Remove a lemma by name. Fails, if the lemma does not exist.
@@ -529,6 +534,8 @@ removeDiffLemma lemmaName thy = do
                                  (return . EitherLemmaItem)
                                  (return . EitherRestrictionItem)
                                  (return . DiffTextItem)
+                                 (return . DiffConfigurationBlockItem)
+
     check l = do guard (L.get lDiffName l /= lemmaName); return (DiffLemmaItem l)
 
 -- | Find the restriction with the given name.
@@ -617,7 +624,7 @@ prettyTheory ppSig ppCache ppRule ppPrf ppSap thy = vsep $
     [ kwEnd ]
   where
     ppItem = foldTheoryItem
-        ppRule prettyRestriction (prettyLemma ppPrf) (uncurry prettyFormalComment) prettyPredicate ppSap
+        ppRule prettyRestriction (prettyLemma ppPrf) (uncurry prettyFormalComment) (text) prettyPredicate ppSap
     thyH = L.get thyHeuristic thy
 
 

@@ -58,7 +58,6 @@ import qualified Data.Label as L
 import Main.Console (renderDoc)
 import qualified Text.PrettyPrint.Class          as Pretty
 import System.Exit
-import Data.Bifunctor (Bifunctor(bimap))
 -- import           System.Process
 
 -- | Create YesodDispatch instance for the interface.
@@ -89,7 +88,7 @@ withWebUI :: String                          -- ^ Message to output once the sev
           -> Bool                            -- ^ Load last proof state if present
           -> Bool                            -- ^ Automatically save proof state
           -> TheoryLoadOptions               -- ^ Options for loading theories
-          -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))  
+          -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either OpenTheory OpenDiffTheory))  
           -- ^ Theory loader (from string).
           -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
           -- ^ Theory closer.
@@ -156,7 +155,7 @@ withWebUI readyMsg cacheDir_ thDir loadState autosave thOpts thLoad thClose debu
 loadTheories :: TheoryLoadOptions
              -> String
              -> FilePath
-             -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String)))
+             -> (String -> FilePath -> ExceptT TheoryLoadError IO (Either OpenTheory OpenDiffTheory))
              -> (SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory))
              -> AutoProver
              -> IO TheoryMap
@@ -171,9 +170,9 @@ loadTheories thOpts readyMsg thDir thLoad thClose autoProver = do
 
       result <- runExceptT $ do
         openThy <- thLoad srcThy path
-        let sig = either (L.get thySignature) (L.get diffThySignature) (bimap fst fst openThy)
+        let sig = either (L.get thySignature) (L.get diffThySignature) openThy
         sig' <- liftIO $ toSignatureWithMaude (L.get oMaudePath thOpts) sig
-        thClose sig' (bimap fst fst openThy)
+        thClose sig' openThy
 
       case result of
         Left (ParserError e) -> do

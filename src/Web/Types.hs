@@ -126,7 +126,7 @@ data WebUI = WebUI
     -- ^ The working directory (for storing/loading theories).
   , thyOpts            :: TheoryLoadOptions
     -- ^ Options for loading theories
-  , loadThy            :: String -> FilePath -> ExceptT TheoryLoadError IO (Either (OpenTheory, String) (OpenDiffTheory, String))
+  , loadThy            :: String -> FilePath -> ExceptT TheoryLoadError IO (Either OpenTheory OpenDiffTheory)
     -- ^ Load a theory according to command-line arguments.
   , closeThy           :: SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> ExceptT TheoryLoadError IO (WfErrorReport, Either ClosedTheory ClosedDiffTheory)
     -- ^ Close an open theory according to command-line arguments.

@@ -109,6 +109,7 @@ closeDiffTheoryWithMaude sig thy0 autoSources =
       (\(s, l) -> EitherLemmaItem (s, fmap skeletonToIncrementalProof l))
       EitherRestrictionItem
       DiffTextItem
+      DiffConfigurationBlockItem
 
     unfoldClosedRules :: [DiffTheoryItem DiffProtoRule [ClosedProtoRule] IncrementalDiffProof IncrementalProof] -> [DiffTheoryItem DiffProtoRule ClosedProtoRule IncrementalDiffProof IncrementalProof]
     unfoldClosedRules    (EitherRuleItem (s,r):is) = map (\x -> EitherRuleItem (s,x)) r ++ unfoldClosedRules is
@@ -117,6 +118,7 @@ closeDiffTheoryWithMaude sig thy0 autoSources =
     unfoldClosedRules       (EitherLemmaItem i:is) = EitherLemmaItem i:unfoldClosedRules is
     unfoldClosedRules (EitherRestrictionItem i:is) = EitherRestrictionItem i:unfoldClosedRules is
     unfoldClosedRules          (DiffTextItem i:is) = DiffTextItem i:unfoldClosedRules is
+    unfoldClosedRules (DiffConfigurationBlockItem i:is) = DiffConfigurationBlockItem i:unfoldClosedRules is
     unfoldClosedRules                           [] = []
 
     -- Name of the auto-generated lemma
@@ -193,6 +195,7 @@ closeTheoryWithMaude sig thy0 autoSources =
        RestrictionItem
        (LemmaItem . fmap skeletonToIncrementalProof)
        TextItem
+       ConfigurationBlockItem
        PredicateItem
        TranslationItem
 
@@ -201,6 +204,7 @@ closeTheoryWithMaude sig thy0 autoSources =
     unfoldClosedRules (RestrictionItem i:is) = RestrictionItem i:unfoldClosedRules is
     unfoldClosedRules       (LemmaItem i:is) = LemmaItem i:unfoldClosedRules is
     unfoldClosedRules        (TextItem i:is) = TextItem i:unfoldClosedRules is
+    unfoldClosedRules (ConfigurationBlockItem i:is) = ConfigurationBlockItem i:unfoldClosedRules is
     unfoldClosedRules   (PredicateItem i:is) = PredicateItem i:unfoldClosedRules is
     unfoldClosedRules       (TranslationItem i:is) = TranslationItem i:unfoldClosedRules is
     unfoldClosedRules                     [] = []

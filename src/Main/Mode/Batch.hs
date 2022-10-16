@@ -13,7 +13,7 @@ module Main.Mode.Batch (
 
 import           Control.Basics
 import           Data.List
-import           Data.Bitraversable              (bisequence, Bitraversable (bitraverse))
+import           Data.Bitraversable              (bisequence)
 import           System.Console.CmdArgs.Explicit as CmdArgs
 import           System.FilePath
 import           System.Timing                   (timed)
@@ -35,7 +35,6 @@ import           Theory.Module
 import           Control.Monad.Except (MonadIO(liftIO), runExceptT)
 import           System.Exit (die)
 import Theory.Tools.Wellformedness (prettyWfErrorReport)
-import qualified Data.Label as L
 import Data.Bifunctor
 
 
@@ -139,10 +138,6 @@ run thisMode as
       Left (ArgumentError e) -> error e
       Right opts             -> opts
     
-    updatedThyLoadOptions s = case mkTheoryLoadOptions $ updateArguments as s of
-      Left (ArgumentError e) -> error e
-      Right opts             -> opts
-
     -- output generation
     --------------------
     writeOutput = argExists "outFile" as || argExists "outDir" as
@@ -172,13 +167,13 @@ run thisMode as
       thy    <- loadTheory thyLoadOptions srcThy inFile
 
       if isParseOnlyMode then do
-        either (\(t,_) -> bisequence (liftIO $ choosePretty t, return Pretty.emptyDoc))
-               (\(d,_) -> return (prettyOpenDiffTheory d, Pretty.emptyDoc)) thy
+        either (\t -> bisequence (liftIO $ choosePretty t, return Pretty.emptyDoc))
+               (\d -> return (prettyOpenDiffTheory d, Pretty.emptyDoc)) thy
       else do
-        let sig = either (\(t,_) -> get thySignature t) (\(d,_) -> get diffThySignature d) thy
+        let sig = either (get thySignature) (get diffThySignature) thy
         sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath thyLoadOptions) sig
 
-        (report, thy') <- closeTheory versionData (updatedThyLoadOptions $ either snd snd thy) sig' (bimap fst fst thy)
+        (report, thy') <- closeTheory versionData thyLoadOptions sig' thy
         either (\t -> return (prettyClosedTheory t,     ppWf report Pretty.$--$ prettyClosedSummary t))
                (\d -> return (prettyClosedDiffTheory d, ppWf report Pretty.$--$ prettyClosedDiffSummary d)) thy'
                
@@ -210,11 +205,3 @@ run thisMode as
           Just ModuleProVerif              -> Export.prettyProVerifTheory (lemmaSelector thyLoadOptions) <=< Sapic.typeTheoryEnv <=< Sapic.warnings
           Just ModuleProVerifEquivalence   -> Export.prettyProVerifEquivTheory <=< Sapic.typeTheoryEnv <=< Sapic.warnings
           Just ModuleDeepSec               -> Export.prettyDeepSecTheory <=< Sapic.typeTheory <=< Sapic.warnings
-
--- | Update command line arguments with arguments taken from the configuration block.
-updateArguments :: Arguments -> String -> Arguments
-updateArguments as argString =
-    foldr updateUnsetArg as $ processValue (mode "theory arguments" [] "" (flagArg (updateArg "na") "N/A") theoryConfFlags) (splitArgs argString)
-  where
-    updateUnsetArg :: (ArgKey, ArgVal) -> Arguments -> Arguments
-    updateUnsetArg (a, v) args = if argExists a args then args else (a,v):args

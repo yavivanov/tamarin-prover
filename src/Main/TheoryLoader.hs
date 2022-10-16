@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- |
 -- Copyright   : (c) 2010, 2011 Benedikt Schmidt & Simon Meier
@@ -15,7 +16,6 @@
 module Main.TheoryLoader (
   -- * Static theory loading settings
     theoryLoadFlags
-  , theoryConfFlags
   , lemmaSelector
 
   , TheoryLoadOptions(..)
@@ -76,16 +76,14 @@ import           Text.Read (readEither, readMaybe)
 import           Theory.Module (ModuleType (ModuleSpthy, ModuleMsr))
 import           qualified Data.Label as L
 import           Theory.Text.Parser.Token (parseString)
-import           Data.Bifunctor (Bifunctor(bimap, second))
+import           Data.Bifunctor (Bifunctor(bimap))
 import           Data.Bitraversable (Bitraversable(bitraverse))
 import           Control.Monad.Catch (MonadCatch, onException, handle)
 import qualified Accountability as Acc
 import qualified Accountability.Generation as Acc
 import GHC.Records (HasField(getField))
-import Data.Text (splitOn)
-import Data.ByteString (split)
 
-import           TheoryObject                        (diffThyOptions)
+import           TheoryObject                        (diffThyOptions, foldTheoryItem, foldDiffTheoryItem)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
 import Data.Maybe (fromMaybe)
 
@@ -93,20 +91,9 @@ import Data.Maybe (fromMaybe)
 -- Theory loading: shared between interactive and batch mode
 ------------------------------------------------------------------------------
 
--- | Flags for loading a theory from a configuration.
-theoryConfFlags :: [Flag Arguments]
-theoryConfFlags =
-  [ flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
-      "How to search for traces (default DFS)"
-
-  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
-      "Try to auto-generate sources lemmas"
-
-  ]
-
 -- | Flags for loading a theory (either command line or from a configuration).
 theoryLoadFlags :: [Flag Arguments]
-theoryLoadFlags = theoryConfFlags ++
+theoryLoadFlags =
 
   [ flagOpt "" ["prove"] (updateArg "prove") "LEMMAPREFIX*|LEMMANAME"
       "Attempt to prove all lemmas that start with LEMMAPREFIX or the lemma which name is LEMMANAME (can be repeated)."
@@ -126,7 +113,7 @@ theoryLoadFlags = theoryConfFlags ++
       "Partially evaluate multiset rewriting system"
 
   , flagOpt "" ["defines","D"] (updateArg "defines") "STRING"
-      "Define flags for pseudo-preprocessor."
+      "Define flags for pseudo-preprocessor"
 
   , flagNone ["diff"] (addEmptyArg "diff")
       "Turn on observational equivalence mode using diff terms"
@@ -143,6 +130,11 @@ theoryLoadFlags = theoryConfFlags ++
   , flagOpt "5" ["saturation","s"] (updateArg "SaturationLimit" ) "PositiveInteger"
       "Limits the number of saturations during precomputations (default 5)"
 
+  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
+      "How to search for traces (default DFS)"
+
+  , flagNone ["auto-sources"] (addEmptyArg "auto-sources")
+      "Try to auto-generate sources lemmas"
 
 --  , flagOpt "" ["diff"] (updateArg "diff") "OFF|ON"
 --      "Turn on observational equivalence (default OFF)."
@@ -155,7 +147,7 @@ theoryLoadFlags = theoryConfFlags ++
 data TheoryLoadOptions = TheoryLoadOptions {
     _oProveMode         :: Bool
   , _oLemmaNames        :: [String]
-  , _oStopOnTrace       :: SolutionExtractor
+  , _oStopOnTrace       :: Maybe SolutionExtractor
   , _oProofBound        :: Maybe Int
   , _oHeuristic         :: Maybe Heuristic
   , _oPartialEvaluation :: Maybe EvaluationStyle
@@ -175,7 +167,7 @@ defaultTheoryLoadOptions :: TheoryLoadOptions
 defaultTheoryLoadOptions = TheoryLoadOptions {
     _oProveMode         = False
   , _oLemmaNames        = []
-  , _oStopOnTrace       = CutDFS
+  , _oStopOnTrace       = Nothing
   , _oProofBound        = Nothing
   , _oHeuristic         = Nothing
   , _oPartialEvaluation = Nothing
@@ -219,12 +211,12 @@ mkTheoryLoadOptions as = TheoryLoadOptions
     proveMode  = return $ argExists "prove" as
     lemmaNames = return $ findArg "prove" as ++ findArg "lemma" as
 
-    stopOnTrace = case map toLower <$> findArg "stopOnTrace" as of
-      Nothing       -> return CutDFS
-      Just "dfs"    -> return CutDFS
-      Just "none"   -> return CutNothing
-      Just "bfs"    -> return CutBFS
-      Just "seqdfs" -> return CutSingleThreadDFS
+    stopOnTrace = case map toLower <$> findArg "stop-on-trace" as of
+      Nothing       -> return $ Just CutDFS
+      Just "dfs"    -> return $ Just CutDFS
+      Just "none"   -> return $ Just CutNothing
+      Just "bfs"    -> return $ Just CutBFS
+      Just "seqdfs" -> return $ Just CutSingleThreadDFS
       Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
 
     proofBound = case maybe (Right Nothing) readEither (findArg "bound" as) of
@@ -264,7 +256,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     chain = findArg "OpenChainsLimit" as
     chainDefault = L.get oOpenChain defaultTheoryLoadOptions
-    openchain = if not (null chain) 
+    openchain = if not (null chain)
                   then return (fromMaybe chainDefault (readMaybe (head chain) ::Maybe Integer))
                   else return chainDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
@@ -311,7 +303,7 @@ instance Show TheoryLoadError
     show (WarningError e) = Pretty.render (prettyWfErrorReport e)
 
 -- FIXME: How can we avoid the MonadCatch here?
-loadTheory :: MonadCatch m => TheoryLoadOptions -> String -> FilePath -> ExceptT TheoryLoadError m (Either (OpenTheory, String) (OpenDiffTheory, String))
+loadTheory :: MonadCatch m => TheoryLoadOptions -> String -> FilePath -> ExceptT TheoryLoadError m (Either OpenTheory OpenDiffTheory)
 loadTheory thyOpts input inFile = do
     thy <- withExceptT ParserError $ liftEither $ unwrapError $ bimap parse parse thyParser
     let thy' = addParamsOptions thyOpts thy
@@ -321,16 +313,12 @@ loadTheory thyOpts input inFile = do
               | otherwise  = Left  $ theory     $ Just inFile
 
     parse p = parseString (toParserFlags thyOpts) inFile p input
-    
-    --translate :: (OpenTheory, String) -> ExceptT TheoryLoadError m (OpenTheory, String)
-    translate (thy, confOpts)
-     | isParseOnlyMode = return (thy, confOpts)
-     | otherwise       = do
-      tthy <- Sapic.typeTheory thy
-      sthy <- Sapic.translate tthy
-      athy <- Acc.translate sthy
-      return (athy, confOpts)
 
+    --translate :: OpenTheory -> ExceptT TheoryLoadError m OpenTheory
+    translate | isParseOnlyMode = return
+              | otherwise       = Sapic.typeTheory
+                              >=> Sapic.translate
+                              >=> Acc.translate
     isDiffMode      = L.get oDiffMode thyOpts
     isParseOnlyMode = L.get oParseOnlyMode thyOpts
 
@@ -342,7 +330,7 @@ loadTheory thyOpts input inFile = do
     withTheory     f t = bitraverse f return t
 
 closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
-closeTheory version thyOpts sig srcThy = do
+closeTheory version thyOpts' sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
                          (const []) srcThy
 
@@ -395,6 +383,39 @@ closeTheory version thyOpts sig srcThy = do
     withTheory     f t = bitraverse f return t
     withDiffTheory f t = bitraverse return f t
 
+    -- | Update command line arguments with arguments taken from the configuration block.
+    
+    thyOpts = updateOptsWithConfFlags thyOpts' srcThy
+
+    updateOptsWithConfFlags thyOpts thy = replaceDefaultsWithConfigArgs thyOpts $ thyConfigBlockArgs thy 
+    thyConfigBlockArgs thy = argsConfString (case thy of
+            Left thy0 -> head $ thyConfigBlock (L.get thyItems thy0)
+            Right diffThy0 -> head $ diffThyConfigBlock (L.get diffThyItems diffThy0))
+      
+    stopOnTrace args = case map toLower <$> findArg "stop-on-trace" args of
+      Nothing       -> CutDFS
+      Just "dfs"    -> CutDFS
+      Just "none"   -> CutNothing
+      Just "bfs"    -> CutBFS
+      Just "seqdfs" -> CutSingleThreadDFS
+      Just unknown  -> error ("unknown stop-on-trace in configuration block: " ++ unknown)
+
+    replaceDefaultsWithConfigArgs thyOpts confStringArg = do
+      let thyOpts0 = case L.get oStopOnTrace thyOpts of
+           Nothing -> L.set oStopOnTrace (Just (stopOnTrace confStringArg)) thyOpts
+           Just _ -> thyOpts
+      let thyOpts1 = (if L.get oAutoSources thyOpts then thyOpts0 else L.set oAutoSources (argExists "auto-sources" confStringArg) thyOpts0)
+      thyOpts1
+
+    thyConfigBlock = map (foldTheoryItem mempty mempty mempty mempty id mempty mempty)
+    diffThyConfigBlock = map (foldDiffTheoryItem mempty mempty mempty mempty mempty mempty id)
+
+    argsConfString confString = processValue (mode "theory arguments" [] "" (flagArg (updateArg "na") "N/A") theoryConfFlags) (splitArgs confString)
+
+    theoryConfFlags =
+      [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
+     , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
+
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
 (&&&) f g x = f x && g x
 
@@ -404,29 +425,29 @@ constructAutoProver :: TheoryLoadOptions -> AutoProver
 constructAutoProver thyOpts =
     AutoProver (L.get oHeuristic thyOpts)
                (L.get oProofBound thyOpts)
-               (L.get oStopOnTrace thyOpts)
+               (fromMaybe CutDFS $ L.get oStopOnTrace thyOpts)
 
 -----------------------------------------------
 -- Add Options parameters in an OpenTheory
 -----------------------------------------------
 
 -- | Add parameters in the OpenTheory, here openchain and saturation in the options
-addParamsOptions :: TheoryLoadOptions -> Either (OpenTheory, String) (OpenDiffTheory, String) -> Either (OpenTheory, String) (OpenDiffTheory, String)
+addParamsOptions :: TheoryLoadOptions -> Either OpenTheory OpenDiffTheory -> Either OpenTheory OpenDiffTheory
 addParamsOptions opt = addSatArg . addChainsArg . addLemmaToProve
 
     where
       -- Add Open Chain Limit parameters in the Options
       chain = L.get oOpenChain opt
-      addChainsArg (Left (thy, as)) = Left (set (openChainsLimit.thyOptions) chain thy, as)
-      addChainsArg (Right (diffThy, as)) = Right (set (openChainsLimit.diffThyOptions) chain diffThy, as)
+      addChainsArg (Left thy) = Left $ set (openChainsLimit.thyOptions) chain thy
+      addChainsArg (Right diffThy) = Right $ set (openChainsLimit.diffThyOptions) chain diffThy
       -- Add Saturation Limit parameters in the Options
       sat = L.get oSaturation opt
-      addSatArg (Left (thy, as)) = Left (set (saturationLimit.thyOptions) sat thy, as)
-      addSatArg (Right (diffThy, as)) = Right (set (saturationLimit.diffThyOptions) sat diffThy, as)
+      addSatArg (Left thy) = Left $ set (saturationLimit.thyOptions) sat thy
+      addSatArg (Right diffThy) = Right $ set (saturationLimit.diffThyOptions) sat diffThy
       -- Add lemmas to Prove in the Options
       lem = L.get oLemmaNames opt
-      addLemmaToProve (Left (thy, as)) = Left (set (lemmasToProve.thyOptions) lem thy, as)
-      addLemmaToProve (Right (diffThy, as)) = Right (set (lemmasToProve.diffThyOptions) lem diffThy, as)
+      addLemmaToProve (Left thy) = Left $ set (lemmasToProve.thyOptions) lem thy
+      addLemmaToProve (Right diffThy) = Right $ set (lemmasToProve.diffThyOptions) lem diffThy
 
 
 ------------------------------------------------------------------------------
