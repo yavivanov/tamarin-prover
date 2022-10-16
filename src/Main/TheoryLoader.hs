@@ -63,7 +63,7 @@ import           Theory.Tools.IntruderRules          (specialIntruderRules, subt
                                                      , multisetIntruderRules, xorIntruderRules)
 import           Theory.Tools.Wellformedness
 import qualified Sapic as Sapic
-import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments, ArgKey, ArgVal, getArg)
+import           Main.Console                        (argExists, findArg, addEmptyArg, updateArg, Arguments)
 
 import           Main.Environment
 

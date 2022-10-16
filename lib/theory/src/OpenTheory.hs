@@ -30,7 +30,6 @@ import Prelude hiding (id, (.))
 import Pretty
 import Theory.Text.Pretty
 import Control.Parallel.Strategies
-import Data.Bifunctor (Bifunctor(bimap))
 
 
 -- remove Sapic items and convert other items to identical item but with unit type for sapic elements
