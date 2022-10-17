@@ -56,6 +56,8 @@ module TheoryObject (
   , diffTheoryLemmas
   , diffTheorySideLemmas
   , diffTheoryDiffLemmas
+  , theoryConfigBlock
+  , diffTheoryConfigBlock
   , expandFormula
   , expandRestriction
   , expandLemma
@@ -367,6 +369,14 @@ diffTheorySideLemmas s =
 diffTheoryDiffLemmas :: DiffTheory sig c r r2 p p2 -> [DiffLemma p]
 diffTheoryDiffLemmas =
     foldDiffTheoryItem (const []) (const []) return (const []) (const []) (const []) (const []) <=< L.get diffThyItems
+
+-- | The configuration block of a theory.
+theoryConfigBlock :: Theory sig c r p s -> ConfigurationBlock
+theoryConfigBlock = foldTheoryItem (const[]) (const[]) (const[]) (const[]) id (const[]) (const[]) <=< L.get thyItems
+
+-- | The configuration block of a theory.
+diffTheoryConfigBlock :: DiffTheory sig c r r2 p p2 -> ConfigurationBlock
+diffTheoryConfigBlock = foldDiffTheoryItem (const[]) (const[]) (const[]) (const[]) (const[]) (const[]) id <=< L.get diffThyItems
 
 
 expandRestriction :: Theory sig c r p s -> ProtoRestriction SyntacticLNFormula

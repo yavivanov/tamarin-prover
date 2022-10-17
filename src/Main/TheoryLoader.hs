@@ -82,7 +82,7 @@ import qualified Accountability as Acc
 import qualified Accountability.Generation as Acc
 import GHC.Records (HasField(getField))
 
-import           TheoryObject                        (diffThyOptions, foldTheoryItem, foldDiffTheoryItem)
+import           TheoryObject                        (diffThyOptions, diffTheoryConfigBlock, theoryConfigBlock)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
 import Data.Maybe (fromMaybe, isNothing)
 
@@ -137,6 +137,7 @@ theoryLoadFlags =
 
   , flagOpt "5" ["saturation","s"] (updateArg "SaturationLimit" ) "PositiveInteger"
       "Limits the number of saturations during precomputations (default 5)"
+
 
 --  , flagOpt "" ["diff"] (updateArg "diff") "OFF|ON"
 --      "Turn on observational equivalence (default OFF)."
@@ -258,7 +259,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     chain = findArg "OpenChainsLimit" as
     chainDefault = L.get oOpenChain defaultTheoryLoadOptions
-    openchain = if not (null chain)
+    openchain = if not (null chain) 
                   then return (fromMaybe chainDefault (readMaybe (head chain) ::Maybe Integer))
                   else return chainDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
@@ -390,31 +391,29 @@ closeTheory version thyOpts' sig srcThy = do
     thyOpts = do
       let thyOpts0 = 
            if isNothing $ L.get oStopOnTrace thyOpts' 
-             then L.set oStopOnTrace (Just (stopOnTrace $ thyConfigBlockArgs srcThy)) thyOpts'
+             then L.set oStopOnTrace (stopOnTrace $ thyConfigBlockArgs srcThy) thyOpts'
              else thyOpts'
       if L.get oAutoSources thyOpts' 
            then thyOpts0 
            else L.set oAutoSources (argExists "auto-sources" $ thyConfigBlockArgs srcThy) thyOpts0
       
-    thyConfigBlockArgs thy = argsConfString (case thy of
-            Left thy0 -> head $ thyConfigBlock (L.get thyItems thy0)
-            Right diffThy0 -> head $ diffThyConfigBlock (L.get diffThyItems diffThy0))
+    thyConfigBlockArgs thy = argsConfigString (case thy of
+            Left thy0 -> theoryConfigBlock thy0
+            Right diffThy0 -> diffTheoryConfigBlock diffThy0)
 
     stopOnTrace args = case map toLower <$> findArg "stop-on-trace" args of
-      Nothing       -> CutDFS
-      Just "dfs"    -> CutDFS
-      Just "none"   -> CutNothing
-      Just "bfs"    -> CutBFS
-      Just "seqdfs" -> CutSingleThreadDFS
+      Just "dfs"    -> Just CutDFS
+      Just "none"   -> Just CutNothing
+      Just "bfs"    -> Just CutBFS
+      Just "seqdfs" -> Just CutSingleThreadDFS
       Just unknown  -> error ("unknown stop-on-trace in configuration block: " ++ unknown)
+      _       -> Nothing
 
-    thyConfigBlock = map (foldTheoryItem mempty mempty mempty mempty id mempty mempty)
-    diffThyConfigBlock = map (foldDiffTheoryItem mempty mempty mempty mempty mempty mempty id)
-
-    argsConfString confString = processValue (mode "theory arguments" [] "" (flagArg (updateArg "na") "N/A") theoryConfFlags) (splitArgs confString)
+    argsConfigString confString = 
+      processValue (mode "configuration block arguments" [] "" (flagArg (updateArg "") "") theoryConfFlags) (splitArgs confString)
 
     theoryConfFlags =
-      [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
+      [flagOpt "" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
 
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
