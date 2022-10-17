@@ -197,7 +197,7 @@ mkTheoryLoadOptions :: MonadError ArgumentError m => Arguments -> m TheoryLoadOp
 mkTheoryLoadOptions as = TheoryLoadOptions
                          <$> proveMode
                          <*> lemmaNames
-                         <*> stopOnTrace
+                         <*> (stopOnTrace as)
                          <*> proofBound
                          <*> heuristic
                          <*> partialEvaluation
@@ -213,14 +213,6 @@ mkTheoryLoadOptions as = TheoryLoadOptions
   where
     proveMode  = return $ argExists "prove" as
     lemmaNames = return $ findArg "prove" as ++ findArg "lemma" as
-
-    stopOnTrace = case map toLower <$> findArg "stop-on-trace" as of
-      Just "dfs"    -> return $ Just CutDFS
-      Just "none"   -> return $ Just CutNothing
-      Just "bfs"    -> return $ Just CutBFS
-      Just "seqdfs" -> return $ Just CutSingleThreadDFS
-      Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
-      _             -> return Nothing
 
     proofBound = case maybe (Right Nothing) readEither (findArg "bound" as) of
       Left _ -> throwError $ ArgumentError "bound: invalid bound given"
@@ -259,7 +251,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     chain = findArg "OpenChainsLimit" as
     chainDefault = L.get oOpenChain defaultTheoryLoadOptions
-    openchain = if not (null chain) 
+    openchain = if not (null chain)
                   then return (fromMaybe chainDefault (readMaybe (head chain) ::Maybe Integer))
                   else return chainDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
@@ -270,6 +262,15 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                    then return (fromMaybe satDefault (readMaybe (head sat) ::Maybe Integer))
                    else return satDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
+
+stopOnTrace :: MonadError ArgumentError m => Arguments -> m (Maybe SolutionExtractor)
+stopOnTrace as = case map toLower <$> findArg "stop-on-trace" as of
+  Just "dfs"    -> return $ Just CutDFS
+  Just "none"   -> return $ Just CutNothing
+  Just "bfs"    -> return $ Just CutBFS
+  Just "seqdfs" -> return $ Just CutSingleThreadDFS
+  Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
+  _             -> return Nothing
 
 lemmaSelectorByModule :: HasLemmaAttributes l => TheoryLoadOptions -> l -> Bool
 lemmaSelectorByModule thyOpt lem = case lemmaModules of
@@ -333,7 +334,7 @@ loadTheory thyOpts input inFile = do
     withTheory     f t = bitraverse f return t
 
 closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
-closeTheory version thyOpts' sig srcThy = do
+closeTheory version loadedThyOptions sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
                          (const []) srcThy
 
@@ -367,13 +368,9 @@ closeTheory version thyOpts' sig srcThy = do
     partialStyle  = L.get oPartialEvaluation thyOpts
     quitOnWarning = L.get oQuitOnWarning thyOpts
 
-    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOptsDefOracle
+    prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts
            | otherwise                = mempty
       where
-        thyOptsDefOracle = case L.get oHeuristic thyOpts of
-          Nothing -> thyOpts
-          Just (Heuristic grs) -> L.set oHeuristic (Just $ Heuristic $ map (defaultOracleName (either (L.get thyInFile) (L.get diffThyInFile) srcThy)) grs) thyOpts
-
     diffProver | L.get oProveMode thyOpts = replaceDiffSorryProver $ runAutoDiffProver $ constructAutoProver thyOpts
                | otherwise                = mempty
 
@@ -387,34 +384,23 @@ closeTheory version thyOpts' sig srcThy = do
     withDiffTheory f t = bitraverse return f t
 
     -- | Update command line arguments with arguments taken from the configuration block.
+    -- | Set the default oraclename if needed.
+    thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
+  
+    configStopOnTrace = L.set oStopOnTrace $ either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs
+    configAutoSources tlo = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || L.get oAutoSources tlo) tlo
+    thyHeurDefOracle tlo = L.set oHeuristic ((\(Heuristic grl) -> Just . Heuristic $ map (defaultOracleName srcThyInFileName) grl) =<< L.get oHeuristic tlo) tlo
 
-    thyOpts = do
-      let thyOpts0 = 
-           if isNothing $ L.get oStopOnTrace thyOpts' 
-             then L.set oStopOnTrace (stopOnTrace $ thyConfigBlockArgs srcThy) thyOpts'
-             else thyOpts'
-      if L.get oAutoSources thyOpts' 
-           then thyOpts0 
-           else L.set oAutoSources (argExists "auto-sources" $ thyConfigBlockArgs srcThy) thyOpts0
-      
-    thyConfigBlockArgs thy = argsConfigString (case thy of
-            Left thy0 -> theoryConfigBlock thy0
-            Right diffThy0 -> diffTheoryConfigBlock diffThy0)
+    srcThyInFileName = either (L.get thyInFile) (L.get diffThyInFile) srcThy
+    srcThyConfigBlockArgs = either (argsConfigString . theoryConfigBlock) (argsConfigString . diffTheoryConfigBlock) srcThy
 
-    stopOnTrace args = case map toLower <$> findArg "stop-on-trace" args of
-      Just "dfs"    -> Just CutDFS
-      Just "none"   -> Just CutNothing
-      Just "bfs"    -> Just CutBFS
-      Just "seqdfs" -> Just CutSingleThreadDFS
-      Just unknown  -> error ("unknown stop-on-trace in configuration block: " ++ unknown)
-      _       -> Nothing
-
-    argsConfigString confString = 
-      processValue (mode "configuration block arguments" [] "" (flagArg (updateArg "") "") theoryConfFlags) (splitArgs confString)
+    argsConfigString =
+      processValue (mode "configuration block arguments" [] "" (flagArg (updateArg "") "") theoryConfFlags) <$> splitArgs
 
     theoryConfFlags =
       [flagOpt "" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
+
 
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
 (&&&) f g x = f x && g x

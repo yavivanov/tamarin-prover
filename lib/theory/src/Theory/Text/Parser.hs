@@ -212,7 +212,7 @@ theory inFile = do
     if block == "configuration"
         then do
             fileArgs <- stringLiteral <* symbol_ "begin"
-            addItems inFile (set thyInFile (fromMaybe "" inFile) $ set thyName thyId (modify thyItems (++ [ConfigurationBlockItem fileArgs]) defThy)) <* symbol_ "end"
+            addItems inFile (set thyInFile (fromMaybe "" inFile) $ set thyName thyId (modify thyItems (++ [ConfigBlockItem fileArgs]) defThy)) <* symbol_ "end"
         else do
             addItems inFile (set thyInFile (fromMaybe "" inFile) $ set thyName thyId defThy) <* symbol_ "end"
   where
@@ -354,7 +354,7 @@ diffTheory inFile = do
     if block == "configuration"
         then do
             fileArgs <- stringLiteral <* symbol_ "begin"
-            addItems inFile (set diffThyInFile (fromMaybe "" inFile) $ set diffThyName thyId (modify diffThyItems (++ [DiffConfigurationBlockItem fileArgs]) (defaultOpenDiffTheory ("diff" `S.member` flags0)))) <* symbol_ "end"
+            addItems inFile (set diffThyInFile (fromMaybe "" inFile) $ set diffThyName thyId (modify diffThyItems (++ [DiffConfigBlockItem fileArgs]) (defaultOpenDiffTheory ("diff" `S.member` flags0)))) <* symbol_ "end"
         else do
             addItems inFile (set diffThyName thyId (defaultOpenDiffTheory ("diff" `S.member` flags0))) <* symbol "end"
   where

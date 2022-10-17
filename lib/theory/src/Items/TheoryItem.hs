@@ -35,7 +35,7 @@ import Items.ExportInfo
 type FormalComment = (String, String)
 
 -- | A configuration block.
-type ConfigurationBlock = String
+type ConfigBlock = String
 
 -- | TranslationItems can be processes, accountability lemmas, and case tests
 data TranslationElement =
@@ -56,7 +56,7 @@ data TheoryItem r p s =
      | LemmaItem (Lemma p)
      | RestrictionItem Restriction
      | TextItem FormalComment
-     | ConfigurationBlockItem ConfigurationBlock
+     | ConfigBlockItem ConfigBlock
      | PredicateItem Predicate
      | TranslationItem s
      deriving( Show, Eq, Ord, Functor, Generic, NFData, Binary )
@@ -74,7 +74,7 @@ data DiffTheoryItem r r2 p p2 =
      | EitherLemmaItem (Side, Lemma p2)
      | EitherRestrictionItem (Side, Restriction)
      | DiffTextItem FormalComment
-     | DiffConfigurationBlockItem ConfigurationBlock
+     | DiffConfigBlockItem ConfigBlock
      deriving( Show, Eq, Ord, Functor, Generic, NFData, Binary )
 
 

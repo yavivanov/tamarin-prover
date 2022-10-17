@@ -206,20 +206,20 @@ filterSide s l = case l of
 
 -- | Fold a theory item.
 foldTheoryItem
-    :: (r -> a) -> (Restriction -> a) -> (Lemma p -> a) -> (FormalComment -> a) -> (ConfigurationBlock -> a) -> (Predicate -> a) -> (s -> a)
+    :: (r -> a) -> (Restriction -> a) -> (Lemma p -> a) -> (FormalComment -> a) -> (ConfigBlock -> a) -> (Predicate -> a) -> (s -> a)
     -> TheoryItem r p s -> a
 foldTheoryItem fRule fRestriction fLemma fText fConfigBlock fPredicate fTranslationItem i = case i of
     RuleItem ru   -> fRule ru
     LemmaItem lem -> fLemma lem
     TextItem txt  -> fText txt
-    ConfigurationBlockItem b -> fConfigBlock b
+    ConfigBlockItem b -> fConfigBlock b
     RestrictionItem rstr  -> fRestriction rstr
     PredicateItem     p  -> fPredicate p
     TranslationItem s -> fTranslationItem s
 
 -- | Fold a theory item.
 foldDiffTheoryItem
-    :: (r -> a) -> ((Side, r2) -> a) -> (DiffLemma p -> a) -> ((Side, Lemma p2) -> a) -> ((Side, Restriction) -> a) -> (FormalComment -> a) -> (ConfigurationBlock -> a)
+    :: (r -> a) -> ((Side, r2) -> a) -> (DiffLemma p -> a) -> ((Side, Lemma p2) -> a) -> ((Side, Restriction) -> a) -> (FormalComment -> a) -> (ConfigBlock -> a)
     -> DiffTheoryItem r r2 p p2 -> a
 foldDiffTheoryItem fDiffRule fEitherRule fDiffLemma fEitherLemma fRestriction fText fConfigBlock i = case i of
     DiffRuleItem ru   -> fDiffRule ru
@@ -228,17 +228,17 @@ foldDiffTheoryItem fDiffRule fEitherRule fDiffLemma fEitherLemma fRestriction fT
     EitherLemmaItem (side, lem) -> fEitherLemma (side, lem)
     EitherRestrictionItem (side, rstr)  -> fRestriction (side, rstr)
     DiffTextItem txt  -> fText txt
-    DiffConfigurationBlockItem b -> fConfigBlock b
+    DiffConfigBlockItem b -> fConfigBlock b
 
 -- | Map a theory item.
 mapTheoryItem :: (r -> r') -> (p -> p') -> TheoryItem r p s -> TheoryItem r' p' s
 mapTheoryItem f g =
-    foldTheoryItem (RuleItem . f) RestrictionItem (LemmaItem . fmap g) TextItem ConfigurationBlockItem PredicateItem TranslationItem
+    foldTheoryItem (RuleItem . f) RestrictionItem (LemmaItem . fmap g) TextItem ConfigBlockItem PredicateItem TranslationItem
 
 -- | Map a diff theory item.
 mapDiffTheoryItem :: (r -> r') -> ((Side, r2) -> (Side, r2')) -> (DiffLemma p -> DiffLemma p') -> ((Side, Lemma p2) -> (Side, Lemma p2')) -> DiffTheoryItem r r2 p p2 -> DiffTheoryItem r' r2' p' p2'
 mapDiffTheoryItem f g h i =
-    foldDiffTheoryItem (DiffRuleItem . f) (EitherRuleItem . g) (DiffLemmaItem . h) (EitherLemmaItem . i) EitherRestrictionItem DiffTextItem DiffConfigurationBlockItem
+    foldDiffTheoryItem (DiffRuleItem . f) (EitherRuleItem . g) (DiffLemmaItem . h) (EitherLemmaItem . i) EitherRestrictionItem DiffTextItem DiffConfigBlockItem
 
 -- | Map a process
 mapMProcesses :: Monad m => (PlainProcess -> m(PlainProcess)) -> Theory sig c r p TranslationElement -> m (Theory sig c r p TranslationElement)
@@ -371,11 +371,11 @@ diffTheoryDiffLemmas =
     foldDiffTheoryItem (const []) (const []) return (const []) (const []) (const []) (const []) <=< L.get diffThyItems
 
 -- | The configuration block of a theory.
-theoryConfigBlock :: Theory sig c r p s -> ConfigurationBlock
+theoryConfigBlock :: Theory sig c r p s -> ConfigBlock
 theoryConfigBlock = foldTheoryItem (const[]) (const[]) (const[]) (const[]) id (const[]) (const[]) <=< L.get thyItems
 
 -- | The configuration block of a theory.
-diffTheoryConfigBlock :: DiffTheory sig c r r2 p p2 -> ConfigurationBlock
+diffTheoryConfigBlock :: DiffTheory sig c r r2 p p2 -> ConfigBlock
 diffTheoryConfigBlock = foldDiffTheoryItem (const[]) (const[]) (const[]) (const[]) (const[]) (const[]) id <=< L.get diffThyItems
 
 
@@ -476,7 +476,7 @@ filterLemma lemmaSelector = modify thyItems (concatMap fItem)
                              (return . RestrictionItem)
                              check
                              (return . TextItem)
-                             (return . ConfigurationBlockItem)
+                             (return . ConfigBlockItem)
                              (return . PredicateItem)
                              (return . TranslationItem)
     check l = do guard (lemmaSelector l); return (LemmaItem l)
@@ -512,7 +512,7 @@ removeLemma lemmaName thy = do
                              (return . RestrictionItem)
                              check
                              (return . TextItem)
-                             (return . ConfigurationBlockItem)
+                             (return . ConfigBlockItem)
                              (return . PredicateItem)
                              (return . TranslationItem)
     check l = do guard (L.get lName l /= lemmaName); return (LemmaItem l)
@@ -529,7 +529,7 @@ removeLemmaDiff s lemmaName thy = do
                                  check
                                  (return . EitherRestrictionItem)
                                  (return . DiffTextItem)
-                                 (return . DiffConfigurationBlockItem)
+                                 (return . DiffConfigBlockItem)
     check (s', l) = do guard (L.get lName l /= lemmaName || s'/=s); return (EitherLemmaItem (s, l))
 
 -- | Remove a lemma by name. Fails, if the lemma does not exist.
@@ -544,7 +544,7 @@ removeDiffLemma lemmaName thy = do
                                  (return . EitherLemmaItem)
                                  (return . EitherRestrictionItem)
                                  (return . DiffTextItem)
-                                 (return . DiffConfigurationBlockItem)
+                                 (return . DiffConfigBlockItem)
 
     check l = do guard (L.get lDiffName l /= lemmaName); return (DiffLemmaItem l)
 
