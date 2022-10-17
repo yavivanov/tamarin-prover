@@ -84,7 +84,7 @@ import GHC.Records (HasField(getField))
 
 import           TheoryObject                        (diffThyOptions, foldTheoryItem, foldDiffTheoryItem)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
@@ -103,7 +103,7 @@ theoryLoadFlags =
   , flagOpt "" ["lemma"] (updateArg "lemma") "LEMMAPREFIX*|LEMMANAME"
       "Select lemma(s) by name or prefx (can be repeated)"
 
-  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stopOnTrace") "DFS|BFS|SEQDFS|NONE"
+  , flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "DFS|BFS|SEQDFS|NONE"
       "How to search for traces (default DFS)"
 
   , flagOpt "5" ["bound", "b"] (updateArg "bound") "INT"
@@ -214,12 +214,12 @@ mkTheoryLoadOptions as = TheoryLoadOptions
     lemmaNames = return $ findArg "prove" as ++ findArg "lemma" as
 
     stopOnTrace = case map toLower <$> findArg "stop-on-trace" as of
-      Nothing       -> return $ Just CutDFS
       Just "dfs"    -> return $ Just CutDFS
       Just "none"   -> return $ Just CutNothing
       Just "bfs"    -> return $ Just CutBFS
       Just "seqdfs" -> return $ Just CutSingleThreadDFS
       Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
+      _             -> return Nothing
 
     proofBound = case maybe (Right Nothing) readEither (findArg "bound" as) of
       Left _ -> throwError $ ArgumentError "bound: invalid bound given"
@@ -387,9 +387,15 @@ closeTheory version thyOpts' sig srcThy = do
 
     -- | Update command line arguments with arguments taken from the configuration block.
 
-    thyOpts = updateOptsWithConfFlags thyOpts' srcThy
-
-    updateOptsWithConfFlags thyOpts thy = replaceDefaultsWithConfigArgs thyOpts $ thyConfigBlockArgs thy
+    thyOpts = do
+      let thyOpts0 = 
+           if isNothing $ L.get oStopOnTrace thyOpts' 
+             then L.set oStopOnTrace (Just (stopOnTrace $ thyConfigBlockArgs srcThy)) thyOpts'
+             else thyOpts'
+      if L.get oAutoSources thyOpts' 
+           then thyOpts0 
+           else L.set oAutoSources (argExists "auto-sources" $ thyConfigBlockArgs srcThy) thyOpts0
+      
     thyConfigBlockArgs thy = argsConfString (case thy of
             Left thy0 -> head $ thyConfigBlock (L.get thyItems thy0)
             Right diffThy0 -> head $ diffThyConfigBlock (L.get diffThyItems diffThy0))
@@ -401,13 +407,6 @@ closeTheory version thyOpts' sig srcThy = do
       Just "bfs"    -> CutBFS
       Just "seqdfs" -> CutSingleThreadDFS
       Just unknown  -> error ("unknown stop-on-trace in configuration block: " ++ unknown)
-
-    replaceDefaultsWithConfigArgs thyOpts confStringArg = do
-      let thyOpts0 = case L.get oStopOnTrace thyOpts of
-           Nothing -> L.set oStopOnTrace (Just (stopOnTrace confStringArg)) thyOpts
-           Just _ -> thyOpts
-      let thyOpts1 = (if L.get oAutoSources thyOpts then thyOpts0 else L.set oAutoSources (argExists "auto-sources" confStringArg) thyOpts0)
-      thyOpts1
 
     thyConfigBlock = map (foldTheoryItem mempty mempty mempty mempty id mempty mempty)
     diffThyConfigBlock = map (foldDiffTheoryItem mempty mempty mempty mempty mempty mempty id)
