@@ -5,18 +5,27 @@ theory DefaultOracle begin
 functions: fst/1[destructor], pair/2, snd/1[destructor]
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
 
-heuristic: o "defaultoracle.oracle"
+heuristic: o ""
 
 rule (modulo E) Rule:
    [ ] --[ A( ) ]-> [ ]
 
   /* has exactly the trivial AC variant */
 
-lemma Test [heuristic=o "defaultoracle.oracle"]:
+lemma Test1 [heuristic=o ""]:
   exists-trace "∃ #i. A( ) @ #i"
 /*
 guarded formula characterizing all satisfying traces:
 "∃ #i. (A( ) @ #i)"
+*/
+simplify
+SOLVED // trace found
+
+lemma Test2:
+  exists-trace "∃ #i #j. (A( ) @ #i) ∧ (A( ) @ #j)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ #i #j. (A( ) @ #i) ∧ (A( ) @ #j)"
 */
 simplify
 SOLVED // trace found
@@ -32,12 +41,12 @@ maude tool: 'maude'
 ==============================================================================
 summary of summaries:
 
-analyzed: examples/regression/trace/defaultoracle.spthy
+analyzed: defaultoracle.spthy
 
-  output:          examples/regression/trace/defaultoracle.spthy.tmp
-  processing time: 0.057367473s
-  
-  Test (exists-trace): verified (2 steps)
+  processing time: 0.027392253s
+
+  Test1 (exists-trace): verified (2 steps)
+  Test2 (exists-trace): verified (2 steps)
 
 ==============================================================================
 */

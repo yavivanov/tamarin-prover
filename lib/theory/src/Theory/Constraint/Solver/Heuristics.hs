@@ -23,6 +23,7 @@ module Theory.Constraint.Solver.Heuristics (
   , Oracle(..)
   , defaultOracle
   , defaultOracleName
+  , defaultOracleNames
   , oraclePath
   , maybeSetOracleWorkDir
   , maybeSetOracleRelPath
@@ -49,7 +50,7 @@ import           Data.Binary
 import           Control.DeepSeq
 import           Data.Maybe         (fromMaybe)
 import qualified Data.Map as M
-import           Data.List          (find)
+import           Data.List          (find, groupBy)
 import           System.FilePath
 
 import           Theory.Text.Pretty
@@ -94,11 +95,17 @@ defaultOracle = Oracle "." ""
 -- Set the oraclename to ./theory_filename.oracle
 defaultOracleName :: FilePath -> GoalRanking -> GoalRanking
 defaultOracleName inFile heur = case heur of 
-          OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir $ inFileOracle inFile
-          OracleRanking  (Oracle workDir "") -> OracleRanking $ Oracle workDir $ inFileOracle inFile
+          OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir inFileOracle
+          OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle workDir inFileOracle
           h -> h
           where
-            inFileOracle inFile0 = (takeWhile ('.' /=) (reverse $ takeWhile ('/' /=) $ reverse inFile0)) ++ ".oracle"
+            inFileOracle = thyInFileName ++ ".oracle"
+            thyInFileName = last $ groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile
+
+-- Set the oraclename to the default for all oracles in a heuristic.
+defaultOracleNames :: Maybe Heuristic -> FilePath -> Maybe Heuristic
+defaultOracleNames (Just (Heuristic grl)) srcThyInFileName = Just . Heuristic $ map (defaultOracleName srcThyInFileName) grl
+defaultOracleNames Nothing _ = Nothing
 
 maybeSetOracleWorkDir :: Maybe FilePath -> Oracle -> Oracle
 maybeSetOracleWorkDir p o = maybe o (\x -> o{ oracleWorkDir = x }) p

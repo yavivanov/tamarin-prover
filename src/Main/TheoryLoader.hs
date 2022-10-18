@@ -85,6 +85,7 @@ import GHC.Records (HasField(getField))
 import           TheoryObject                        (diffThyOptions, diffTheoryConfigBlock, theoryConfigBlock)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
 import Data.Maybe (fromMaybe, isNothing)
+import Theory.Constraint.Solver.Heuristics (defaultOracleNames)
 
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
@@ -270,7 +271,7 @@ stopOnTrace as = case map toLower <$> findArg "stop-on-trace" as of
   Just "bfs"    -> return $ Just CutBFS
   Just "seqdfs" -> return $ Just CutSingleThreadDFS
   Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
-  _             -> return Nothing
+  Nothing       -> return Nothing
 
 lemmaSelectorByModule :: HasLemmaAttributes l => TheoryLoadOptions -> l -> Bool
 lemmaSelectorByModule thyOpt lem = case lemmaModules of
@@ -370,7 +371,7 @@ closeTheory version loadedThyOptions sig srcThy = do
 
     prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts
            | otherwise                = mempty
-      where
+      
     diffProver | L.get oProveMode thyOpts = replaceDiffSorryProver $ runAutoDiffProver $ constructAutoProver thyOpts
                | otherwise                = mempty
 
@@ -386,13 +387,21 @@ closeTheory version loadedThyOptions sig srcThy = do
     -- | Update command line arguments with arguments taken from the configuration block.
     -- | Set the default oraclename if needed.
     thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
-  
-    configStopOnTrace = L.set oStopOnTrace $ either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs
-    configAutoSources tlo = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || L.get oAutoSources tlo) tlo
-    thyHeurDefOracle tlo = L.set oHeuristic ((\(Heuristic grl) -> Just . Heuristic $ map (defaultOracleName srcThyInFileName) grl) =<< L.get oHeuristic tlo) tlo
 
+    configStopOnTrace = 
+      if isNothing loadedStopOnTrace
+        then L.set oStopOnTrace (either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs)
+        else id
+
+    configAutoSources = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || loadedAutoSources)
+    thyHeurDefOracle  = L.set oHeuristic (defaultOracleNames loadedHeuristic srcThyInFileName)
+    
+    loadedAutoSources = L.get oAutoSources loadedThyOptions
+    loadedStopOnTrace = L.get oStopOnTrace loadedThyOptions
+    loadedHeuristic   = L.get oHeuristic loadedThyOptions
+ 
     srcThyInFileName = either (L.get thyInFile) (L.get diffThyInFile) srcThy
-    srcThyConfigBlockArgs = either (argsConfigString . theoryConfigBlock) (argsConfigString . diffTheoryConfigBlock) srcThy
+    srcThyConfigBlockArgs = argsConfigString $ either theoryConfigBlock diffTheoryConfigBlock srcThy
 
     argsConfigString =
       processValue (mode "configuration block arguments" [] "" (flagArg (updateArg "") "") theoryConfFlags) <$> splitArgs

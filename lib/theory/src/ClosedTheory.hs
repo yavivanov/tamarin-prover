@@ -115,10 +115,11 @@ getProofContext l thy = ProofContext
 
     -- Heuristic specified for the lemma > globally specified heuristic > default heuristic
     specifiedHeuristic = case lattr of
-        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get thyInFile thy)) grl))
         Nothing  -> case L.get thyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic (map (defaultOracleName (L.get thyInFile thy)) gh))
+                    gh -> Just . Heuristic $ map (defaultOracleName (L.get thyInFile thy)) gh
+        lh -> defaultOracleNames lh (L.get thyInFile thy)
+
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
@@ -163,10 +164,10 @@ getProofContextDiff s l thy = case s of
       | otherwise                                                        = AvoidInduction
     -- Heuristic specified for the lemma > globally specified heuristic > default heuristic
     specifiedHeuristic = case lattr of
-        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) grl))
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) gh))
+                    gh -> Just . Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
+        lh -> defaultOracleNames lh (L.get diffThyInFile thy)
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
@@ -220,10 +221,11 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
 
     specifiedHeuristic = case lattr of
-        Just (Heuristic grl) -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) grl))
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just (Heuristic (map (defaultOracleName (L.get diffThyInFile thy)) gh))
+                    gh -> Just . Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
+        lh -> defaultOracleNames lh (L.get diffThyInFile thy)
+
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lDiffAttributes l])

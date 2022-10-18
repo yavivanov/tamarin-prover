@@ -5,8 +5,12 @@ heuristic: o
 rule Rule:
   []--[A()]->[]
 
-lemma Test [heuristic=o]:
+lemma Test1 [heuristic=o]:
   exists-trace
   " Ex #i. A()@i"
+
+lemma Test2:
+  exists-trace
+  " Ex #i #j. A()@i & A()@j"
 
 end
