@@ -136,6 +136,19 @@ case-studies$(SUBDIR)%_analyzed-seqdfs.spthy: examples/%.spthy $(TAMARIN)
 	mv $<.tmp $@
 	\rm -f $<.out
 
+# individual case studies, special case with default oracle
+case-studies$(SUBDIR)%_analyzed-deforacle.spthy: examples/%.spthy $(TAMARIN)
+	mkdir -p case-studies$(SUBDIR)regression/trace
+	# Use -N3, as the fourth core is used by the OS and the console
+	cd examples/regression/trace && $(TAMARIN) defaultoracle.spthy --prove +RTS -N3 -RTS -odefaultoracle.spthy.tmp >defaultoracle.spthy.out
+	# We only produce the target after the run, otherwise aborted
+	# runs already 'finish' the case.
+	printf "\n/* Output\n" >>$<.tmp
+	cat $<.out >>$<.tmp
+	echo "*/" >>$<.tmp
+	mv $<.tmp $@
+	\rm -f $<.out
+
 
 ## Observational Equivalence
 ############################
@@ -406,7 +419,7 @@ SEQDFS_CASE_STUDIES=seqdfsneeded.spthy
 SEQDFS_TARGETS=$(subst .spthy,_analyzed-seqdfs.spthy,$(addprefix case-studies$(SUBDIR)regression/trace/,$(SEQDFS_CASE_STUDIES)))
 
 DEFAULTORACLE_CASE_STUDIES=defaultoracle.spthy
-DEFAULTORACLE_CASE_TARGETS=$(subst .spthy,_analyzed.spthy, $(addprefix case-studies$(SUBDIR)regression/trace/,$(DEFAULTORACLE_CASE_STUDIES)))
+DEFAULTORACLE_CASE_TARGETS=$(subst .spthy,_analyzed-deforacle.spthy, $(addprefix case-studies$(SUBDIR)regression/trace/,$(DEFAULTORACLE_CASE_STUDIES)))
 
 # case studies
 regression-case-studies:	$(REGRESSION_TARGETS) $(SEQDFS_TARGETS) $(DEFAULTORACLE_CASE_TARGETS)

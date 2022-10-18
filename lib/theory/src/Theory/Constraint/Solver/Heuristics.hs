@@ -95,8 +95,8 @@ defaultOracle = Oracle "." ""
 -- Set the oraclename to ./theory_filename.oracle
 defaultOracleName :: FilePath -> GoalRanking -> GoalRanking
 defaultOracleName inFile heur = case heur of
-          OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir inFileOracle
-          OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle workDir inFileOracle
+          OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle "." inFileOracle
+          OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle "." inFileOracle
           h -> h
           where
             inFileOracle = last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
