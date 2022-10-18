@@ -94,13 +94,12 @@ defaultOracle = Oracle "." ""
 
 -- Set the oraclename to ./theory_filename.oracle
 defaultOracleName :: FilePath -> GoalRanking -> GoalRanking
-defaultOracleName inFile heur = case heur of 
+defaultOracleName inFile heur = case heur of
           OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir inFileOracle
           OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle workDir inFileOracle
           h -> h
           where
-            inFileOracle = thyInFileName ++ ".oracle"
-            thyInFileName = last $ groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile
+            inFileOracle = last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
 
 -- Set the oraclename to the default for all oracles in a heuristic.
 defaultOracleNames :: Maybe Heuristic -> FilePath -> Maybe Heuristic
