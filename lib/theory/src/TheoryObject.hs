@@ -109,6 +109,7 @@ module TheoryObject (
   , lookupExportInfo
   , prettyRestriction
   , prettyProcess
+  , prettyConfigBlock
   , theoryCaseTests
   , theoryAccLemmas
   , addAccLemma
@@ -167,7 +168,7 @@ import Items.CaseTestItem (prettyCaseTest)
 -- and the lemmas that
 data Theory sig c r p s = Theory {
          _thyName      :: String
-       , _thyInFile    :: String  
+       , _thyInFile    :: String
        , _thyHeuristic :: [GoalRanking]
        , _thySignature :: sig
        , _thyCache     :: c
@@ -634,7 +635,7 @@ prettyTheory ppSig ppCache ppRule ppPrf ppSap thy = vsep $
     [ kwEnd ]
   where
     ppItem = foldTheoryItem
-        ppRule prettyRestriction (prettyLemma ppPrf) (uncurry prettyFormalComment) (text) prettyPredicate ppSap
+        ppRule prettyRestriction (prettyLemma ppPrf) (uncurry prettyFormalComment) prettyConfigBlock prettyPredicate ppSap
     thyH = L.get thyHeuristic thy
 
 
@@ -712,3 +713,7 @@ prettyEitherRestriction (s, rstr) =
     (nest 2 $ if safety then lineComment_ "safety formula" else emptyDoc)
   where
     safety = isSafetyFormula $ formulaToGuarded_ $ L.get rstrFormula rstr
+
+-- | Pretty print a configuration block. 
+prettyConfigBlock :: HighlightDocument d => ConfigBlock -> d
+prettyConfigBlock cb = text "configuration: " <> doubleQuotes (text cb)

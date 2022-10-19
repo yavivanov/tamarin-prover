@@ -749,5 +749,5 @@ prettyDiffTheory ppSig ppCache ppRule ppDiffPrf ppPrf thy = vsep $
     [ kwEnd ]
   where
     ppItem = foldDiffTheoryItem
-        prettyDiffRule ppRule (prettyDiffLemma ppDiffPrf) (prettyEitherLemma ppPrf) prettyEitherRestriction (uncurry prettyFormalComment) (text)
+        prettyDiffRule ppRule (prettyDiffLemma ppDiffPrf) (prettyEitherLemma ppPrf) prettyEitherRestriction (uncurry prettyFormalComment) prettyConfigBlock
     thyH = L.get diffThyHeuristic thy
