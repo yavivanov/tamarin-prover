@@ -85,7 +85,6 @@ import GHC.Records (HasField(getField))
 import           TheoryObject                        (diffThyOptions, diffTheoryConfigBlock, theoryConfigBlock)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
 import Data.Maybe (fromMaybe, isNothing)
-import Theory.Constraint.Solver.Heuristics (defaultOracleNames)
 
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
@@ -252,7 +251,7 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     chain = findArg "OpenChainsLimit" as
     chainDefault = L.get oOpenChain defaultTheoryLoadOptions
-    openchain = if not (null chain)
+    openchain = if not (null chain) 
                   then return (fromMaybe chainDefault (readMaybe (head chain) ::Maybe Integer))
                   else return chainDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
@@ -371,7 +370,7 @@ closeTheory version loadedThyOptions sig srcThy = do
 
     prover | L.get oProveMode thyOpts = replaceSorryProver $ runAutoProver $ constructAutoProver thyOpts
            | otherwise                = mempty
-      
+
     diffProver | L.get oProveMode thyOpts = replaceDiffSorryProver $ runAutoDiffProver $ constructAutoProver thyOpts
                | otherwise                = mempty
 
@@ -407,7 +406,7 @@ closeTheory version loadedThyOptions sig srcThy = do
       processValue (mode "configuration block arguments" [] "" (flagArg (updateArg "") "") theoryConfFlags) <$> splitArgs
 
     theoryConfFlags =
-      [flagOpt "" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
+      [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
 
 
