@@ -119,7 +119,6 @@ getProofContext l thy = ProofContext
                     [] -> Nothing
                     gh -> Just . Heuristic $ map (defaultOracleName (L.get thyInFile thy)) gh
         lh -> defaultOracleNames lh (L.get thyInFile thy)
-
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
@@ -225,7 +224,6 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
                     [] -> Nothing
                     gh -> Just . Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
         lh -> defaultOracleNames lh (L.get diffThyInFile thy)
-
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lDiffAttributes l])

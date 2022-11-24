@@ -409,7 +409,6 @@ closeTheory version loadedThyOptions sig srcThy = do
       [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
 
-
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
 (&&&) f g x = f x && g x
 

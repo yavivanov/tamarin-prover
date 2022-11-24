@@ -227,7 +227,7 @@ theory inFile = do
            addItems inFile0 thy'      
       , do fs <- functions
            msig <- sig <$> getState
-           let thy' = foldl (flip addFunctionTypingInfo) thy fs in       
+           let thy' = foldl (flip addFunctionTypingInfo) thy fs in           
              addItems inFile0 $ set (sigpMaudeSig . thySignature) msig thy'
       , do equations
            msig <- sig <$> getState
