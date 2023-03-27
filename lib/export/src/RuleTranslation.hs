@@ -29,7 +29,7 @@ import Data.List as List
 
 import qualified Data.ByteString.Char8 as BC
 import Data.Char
-import Sapic.Facts (isFrFact, isOutFact, hasPattern, patternInsFilter, nonPatternInsFilter, isPattern)
+import Sapic.Facts
 
 -- This is the function which is called from the export module. It returns a list
 -- of process declarations for translated rules, a process which executes them all
@@ -124,12 +124,7 @@ translateOpenProtoRule (OpenProtoRule ruE _) thy de = translateProtoRule (checkT
 -- Functions with user-defined types cannot be used in rewrite rules, they
 -- are currently written such that everything is treated as a bitstring
 checkTypes :: Rule ProtoRuleEInfo -> OpenTheory -> Rule ProtoRuleEInfo
-checkTypes ru thy = case length incorrectFunctionUsages of
-  0 -> ru
-  1 -> throw (UnsupportedTypes ("The function " ++ head incorrectFunctionUsages ++ ", which is declared with a user-defined type, appears in a rewrite rule. ") :: ExportException)
-  _ -> let functions_string = List.intercalate ", " incorrectFunctionUsages
-       in
-        throw (UnsupportedTypes ("The functions " ++ functions_string ++ ", which are declared with user-defined types, appear in a rewrite rule. ") :: ExportException)
+checkTypes ru thy = if null incorrectFunctionUsages then ru else throw $ UnsupportedTypes incorrectFunctionUsages
   where
     acts             = filter isNotDiffAnnotation (L.get rActs ru)
     isNotDiffAnnotation fa = (fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []})
@@ -146,7 +141,6 @@ incorrectTermTypes thy t = case viewTerm t of
     where
       functionInfo = theoryFunctionTypingInfos thy
       checkFun name = concatMap (\(_ , inTypes, outTypes) -> typeChecker name inTypes outTypes) $ filter (\((f,_), _, _) -> BC.unpack f == name) functionInfo
-        --foldl (\acc ((f, _), inTypes, outType) -> acc ++ (if (BC.unpack f) == name then typeChecker name inTypes outType else [])) [] functionInfo
       typeChecker name _ (Just _)             = [name]
       typeChecker name [] _                   = []
       typeChecker name (Nothing : ts) outType = typeChecker name ts outType

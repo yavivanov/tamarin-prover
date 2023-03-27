@@ -63,12 +63,17 @@ data SapicException p = NotImplementedError String
 
 data ExportException = UnsupportedBuiltinMS
                        | UnsupportedBuiltinBP
-                       | UnsupportedTypes String
+                       | UnsupportedTypes [String]
 
 instance Show ExportException where
     show UnsupportedBuiltinMS = "The builtins bilinear-pairing and multiset are not supported for export. However, your model uses multiset."
     show UnsupportedBuiltinBP = "The builtins bilinear-pairing and multiset are not supported for export. However, your model uses bilinear-pairing."
-    show (UnsupportedTypes s) = s ++ "However, the translation of rules only works with bitstrings at the moment."
+    show (UnsupportedTypes incorrectFunctionUsages) = do
+        let functionsString = List.intercalate ", " incorrectFunctionUsages
+        (case length functionsString of
+          1 -> "The function " ++ functionsString ++ ", which is declared with a user-defined type, appears in a rewrite rule. "
+          _ -> "The functions " ++ functionsString ++ ", which are declared with a user-defined type, appear in a rewrite rule. ")
+        ++ "However, the translation of rules only works with bitstrings at the moment."
 
 prettyVarSet :: S.Set LVar -> String
 prettyVarSet = List.intercalate ", "  . List.map show . toList
