@@ -59,9 +59,10 @@ library
       , tamarin-prover-term
       , tamarin-prover-theory
       , tamarin-prover-sapic
-      , tamarin-prover-rule-translation
 
     hs-source-dirs: src
 
     exposed-modules:
         Export
+        RuleTranslation
+

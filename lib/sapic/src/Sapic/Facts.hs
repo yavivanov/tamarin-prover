@@ -15,6 +15,7 @@ module Sapic.Facts (
    , StateKind(..)
    , isSemiState
    , isState
+   , isFrFact
    , isOutFact
    , isStateFact
    , isLetFact
@@ -30,6 +31,10 @@ module Sapic.Facts (
    , varMID
    , varProgress
    , msgVarProgress
+   , patternInsFilter
+   , nonPatternInsFilter
+   , isPattern
+   , hasPattern
    , propagateNames
 ) where
 -- import Data.Maybe
@@ -263,6 +268,11 @@ isOutFact (Fact OutFact _ _) = True
 isOutFact _                 = False
 
 
+isFrFact :: Fact t -> Bool
+isFrFact (Fact FreshFact _ _) = True
+isFrFact _                 = False
+
+
 isLetFact :: Fact LNTerm -> Bool
 isLetFact (Fact (ProtoFact _ name _) _ _) =
   "Let" `List.isPrefixOf` name
@@ -281,6 +291,19 @@ isLockFact (Fact (ProtoFact _ name _) _ _) =
   "L_CellLocked" `List.isPrefixOf` name
 isLockFact _ = False
 
+patternInsFilter :: LNFact -> Bool
+patternInsFilter f = isInFact f && hasPattern f
+
+nonPatternInsFilter :: LNFact -> Bool
+nonPatternInsFilter f = isInFact f && not (hasPattern f)
+
+isPattern :: Term l -> Bool
+isPattern t = case viewTerm t of
+    Lit _ -> False
+    _     -> True
+
+hasPattern :: LNFact -> Bool
+hasPattern (Fact _ _ ts) = any isPattern ts
 
 prettyEitherPositionOrSpecial:: Either ProcessPosition SpecialPosition -> String
 prettyEitherPositionOrSpecial (Left pos) = prettyPosition pos

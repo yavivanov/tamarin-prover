@@ -18,7 +18,6 @@ module Export (
     prettyProVerifTheory,
     prettyProVerifEquivTheory,
     prettyDeepSecTheory
-
 ) where
 import         Term.Builtin.Rules
 import         Term.SubtermRule
@@ -1084,9 +1083,10 @@ loadHeaders tc thy typeEnv = do
     headerBuiltins =
       foldl
         ( \y x -> case List.lookup x builtins of
-            Nothing -> if (x == "multiset") || (x == "bilinear-pairing")
-                         then throw (UnsupportedBuiltins x :: ExportException)
-                         else y
+            Nothing -> case x of
+              "multiset"         -> throw UnsupportedBuiltinMS
+              "bilinear-pairing" -> throw UnsupportedBuiltinBP
+              _                  -> y
             Just t -> y `S.union` t
         )
         S.empty
@@ -1273,14 +1273,6 @@ replaceTrueFalse s = s
 
 sanitizeSymbol :: Char -> String -> String
 sanitizeSymbol pre s = 
-  if (s `List.elem` reserved_words) || (Data.Char.isDigit $ head s)
+  if (s `List.elem` reservedWords) || (Data.Char.isDigit $ head s)
                        then pre : s
                        else s
-  where
-    reserved_words = ["among", "axiom", "channel", "choice", "clauses", "const", "def", "diff",
-      "do", "elimtrue", "else", "equation", "equivalence", "event", "expand", "fail", "for",
-      "forall", "foreach", "free", "fun", "get", "if", "implementation", "in", "inj-event",
-      "insert", "lemma", "let", "letfun", "letproba", "new", "noninterf", "noselect", "not",
-      "nounif", "or", "otherwise", "out", "param", "phase", "pred", "proba", "process",
-      "proof", "public_vars", "putbegin", "query", "reduc", "restriction", "secret", "select",
-      "set", "suchthat", "sync", "table", "then", "type", "weaksecret", "yield"]

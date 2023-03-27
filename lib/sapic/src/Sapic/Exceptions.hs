@@ -61,11 +61,13 @@ data SapicException p = NotImplementedError String
                     | CannotExpandPredicate FactTag SyntacticRestriction
     deriving (Typeable)
 
-data ExportException = UnsupportedBuiltins String
-                        | UnsupportedTypes String
+data ExportException = UnsupportedBuiltinMS
+                       | UnsupportedBuiltinBP
+                       | UnsupportedTypes String
 
 instance Show ExportException where
-    show (UnsupportedBuiltins s) = "The builtins bilinear-pairing and multiset are not supported for export. However, your model uses " ++ s ++ "."
+    show UnsupportedBuiltinMS = "The builtins bilinear-pairing and multiset are not supported for export. However, your model uses multiset."
+    show UnsupportedBuiltinBP = "The builtins bilinear-pairing and multiset are not supported for export. However, your model uses bilinear-pairing."
     show (UnsupportedTypes s) = s ++ "However, the translation of rules only works with bitstrings at the moment."
 
 prettyVarSet :: S.Set LVar -> String
@@ -90,10 +92,10 @@ instance (Show p) => Show (SapicException p) where
                               ++ "."
 
 prettySapicException :: (Show an, HighlightDocument d, GoodAnnotation an) => SapicException (LProcess an) -> d
-prettySapicException (ProcessNotWellformed e p) = text (show e) <-> maybe emptyDoc ppP p 
+prettySapicException (ProcessNotWellformed e p) = text (show e) <-> maybe emptyDoc ppP p
     where ppP = prettyProcess . toProcess
-prettySapicException o = text (show o) 
-        
+prettySapicException o = text (show o)
+
 instance Show WFerror where
     show (WFUnbound varset) =
                    "The variable(s) "
@@ -128,7 +130,7 @@ instance Show WFerror where
                               ++ prettySapicFunType t2
                               ++ "."
     show (FunctionNotDefined sym ) = "Function not defined " ++ show sym
-        
+
 
 instance Exception WFerror
 instance (Typeable a, Show a) => Exception (SapicException a)

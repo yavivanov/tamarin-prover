@@ -1,10 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns               #-}
+
 -- |
 -- Copyright   : (c) 2022 Julian Biehl
 -- License     : GPL v3 (see LICENSE)
@@ -15,27 +10,17 @@
 -- Translation from multiset rewrite rules to ProVerif
 
 module RuleTranslation (
-    loadRules
+    loadRules,
+    reservedWords
 ) where
 
-import         Term.Builtin.Rules
-import         Term.SubtermRule
-
 import         Theory
-import         Theory.Sapic
-import         Theory.Module
 import         Text.PrettyPrint.Class
 import         Theory.Text.Pretty
 
-import         Sapic.Annotation
-import         Sapic.States
-import         Sapic.Report
-import         Sapic.Typing
 import         Sapic.Exceptions
 
-import           Control.Monad.Fresh
 import           Control.Exception
-import qualified Control.Monad.Trans.PreciseFresh as Precise
 
 import qualified Data.Set as S
 import qualified Data.Label as L
@@ -43,9 +28,8 @@ import qualified Data.Map as M
 import Data.List as List
 
 import qualified Data.ByteString.Char8 as BC
-import qualified Data.Functor.Identity
 import Data.Char
-import Data.Data
+import Sapic.Facts (isFrFact, isOutFact, hasPattern, patternInsFilter, nonPatternInsFilter, isPattern)
 
 -- This is the function which is called from the export module. It returns a list
 -- of process declarations for translated rules, a process which executes them all
@@ -78,7 +62,7 @@ makeHeadersFromRule :: OpenProtoRule -> OpenTheory -> ([(String, String, String,
 makeHeadersFromRule (OpenProtoRule ruE _) thy = makeHeadersFromProtoRule ruE thy
 
 makeHeadersFromProtoRule :: Rule ProtoRuleEInfo -> OpenTheory -> ([(String, String, String, [String])], [(String, String)], [(String, String)])
-makeHeadersFromProtoRule ru thy = 
+makeHeadersFromProtoRule ru thy =
   (frees, tables, events)
     where
     acts             = filter isNotDiffAnnotation (L.get rActs ru)
@@ -89,7 +73,7 @@ makeHeadersFromProtoRule ru thy =
     events = makeEventHeaders acts
 
 makeFreeHeaders :: [LNFact] -> [LNFact] -> [LNFact] -> OpenTheory -> [(String, String, String, [String])]
-makeFreeHeaders prems acts concls thy = 
+makeFreeHeaders prems acts concls thy =
   headers
   where
     getTerms (Fact _ _ ts) = ts
@@ -123,7 +107,7 @@ makeTableHeaders prems concls =
     headers = map (\(t,n) -> (t, "(" ++ (intercalate ", " $ replicate n "bitstring") ++ ")")) tableInfos
 
 makeEventHeaders :: [LNFact] -> [(String, String)]
-makeEventHeaders acts = 
+makeEventHeaders acts =
   headers
   where
     getFactInfo (Fact tag _ ts) = (showEventName tag, length ts)
@@ -142,7 +126,7 @@ translateOpenProtoRule (OpenProtoRule ruE _) thy de = translateProtoRule (checkT
 checkTypes :: Rule ProtoRuleEInfo -> OpenTheory -> Rule ProtoRuleEInfo
 checkTypes ru thy = case length incorrectFunctionUsages of
   0 -> ru
-  1 -> throw (UnsupportedTypes ("The function " ++ (incorrectFunctionUsages !! 0) ++ ", which is declared with a user-defined type, appears in a rewrite rule. ") :: ExportException)
+  1 -> throw (UnsupportedTypes ("The function " ++ head incorrectFunctionUsages ++ ", which is declared with a user-defined type, appears in a rewrite rule. ") :: ExportException)
   _ -> let functions_string = List.intercalate ", " incorrectFunctionUsages
        in
         throw (UnsupportedTypes ("The functions " ++ functions_string ++ ", which are declared with user-defined types, appear in a rewrite rule. ") :: ExportException)
@@ -161,7 +145,8 @@ incorrectTermTypes thy t = case viewTerm t of
     FApp _             ts -> foldl (\acc x -> acc ++ incorrectTermTypes thy x) [] ts
     where
       functionInfo = theoryFunctionTypingInfos thy
-      checkFun name = foldl (\acc ((f, _), inTypes, outType) -> acc ++ (if (BC.unpack f) == name then typeChecker name inTypes outType else [])) [] functionInfo
+      checkFun name = concatMap (\(_ , inTypes, outTypes) -> typeChecker name inTypes outTypes) $ filter (\((f,_), _, _) -> BC.unpack f == name) functionInfo
+        --foldl (\acc ((f, _), inTypes, outType) -> acc ++ (if (BC.unpack f) == name then typeChecker name inTypes outType else [])) [] functionInfo
       typeChecker name _ (Just _)             = [name]
       typeChecker name [] _                   = []
       typeChecker name (Nothing : ts) outType = typeChecker name ts outType
@@ -185,60 +170,35 @@ showRuleName FreshRule = "rFresh"
 showRuleName (StandRule s) = "r" ++ s
 
 translateRule :: (HighlightDocument d) => [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)
-translateRule prems acts concls destrs = 
+translateRule prems acts concls destrs =
     let (docs1, vars1, vars1', destr1) = translatePatterns prems "GET" patternGetsFilter S.empty M.empty destrs
         (docs2, vars2) = translateNonPatterns prems "GET" nonPatternGetsFilter vars1
         (docs3, vars3, _, destr3) = translatePatterns prems "IN" patternInsFilter vars2 vars1' destr1
         (docs4, vars4) = translateNonPatterns prems "IN" nonPatternInsFilter vars3
-        (docs5, vars5) = translateNonPatterns prems "NEW" newsFilter vars4
+        (docs5, vars5) = translateNonPatterns prems "NEW" isFrFact vars4
         (docs6, vars6) = translateNonPatterns acts "EVENT" (\x -> True) vars5
         (docs7, vars7) = translateNonPatterns (concls \\ prems) "INSERT" isStorage vars6
-        (docs8, _) = translateNonPatterns concls "OUT" outsFilter vars7
+        (docs8, _) = translateNonPatterns concls "OUT" isOutFact vars7
       in
     (combineRuleDocs (docs1++docs2++docs3) (docs4++docs5++docs6++docs7++docs8), destr3)
 
 combineRuleDocs :: (HighlightDocument d) => [d] -> [d] -> d
-combineRuleDocs rd1 rd2 = case rd2 of
-                           [] -> vcat rd1 $-$ text "0."
-                           _  -> vcat rd1 $-$ separateRuleDocs rd2
-                          where
-                            separateRuleDocs [r] = r <> text "."
-                            separateRuleDocs (r:rs) = r <> semi $-$ separateRuleDocs rs
+combineRuleDocs rd1 rd2 = vcat rd1 $-$ separateRuleDocs rd2
+    where
+        separateRuleDocs []     = text "0."
+        separateRuleDocs [r]    = r <> text "."
+        separateRuleDocs (r:rs) = r <> semi $-$ separateRuleDocs rs
 
 
 isStorage :: LNFact -> Bool
-isStorage (Fact tag _ _) = case factTagName tag of
-  "Fr"  -> False
-  "In"  -> False
-  "Out" -> False
-  _     -> True
-
-isPattern :: Term l -> Bool
-isPattern t = case viewTerm t of
-    Lit _ -> False
-    _     -> True
-
-hasPattern :: LNFact -> Bool
-hasPattern (Fact _ _ ts) = 
-  foldl (\acc t -> acc || isPattern t) False ts
+isStorage f = not (isFrFact f || isInFact f || isOutFact f)
 
 patternGetsFilter :: LNFact -> Bool
-patternGetsFilter p = (isStorage p) && hasPattern p
+patternGetsFilter p = isStorage p && hasPattern p
 
 nonPatternGetsFilter :: LNFact -> Bool
-nonPatternGetsFilter p = (isStorage p) && not (hasPattern p)
+nonPatternGetsFilter p = isStorage p && not (hasPattern p)
 
-patternInsFilter :: LNFact -> Bool
-patternInsFilter p@(Fact tag _ _) = (factTagName tag) == "In" && hasPattern p
-
-nonPatternInsFilter :: LNFact -> Bool
-nonPatternInsFilter p@(Fact tag _ _) = (factTagName tag) == "In" && not (hasPattern p)
-
-newsFilter :: LNFact -> Bool
-newsFilter (Fact tag _ _) = (factTagName tag) == "Fr"
-
-outsFilter :: LNFact -> Bool
-outsFilter (Fact tag _ _) = (factTagName tag) == "Out"
 
 -- | @translatePatterns facts factType filterFunction vars helperVars destructors@ applies the
 --   @filterFunction@ to the @facts@ to extract those that should be translated with this call, and
@@ -258,7 +218,7 @@ translatePatterns facts factType filterFunction vars helperVars destructors =
     (doclist, finalvars, finalHelperVars, finalDestructors)
     where
       patternFacts = filter filterFunction facts
-      
+
       -- Translates one single fact, both with the core part that is either 'get' or 'in', as well
       -- as all destructor expressions to extract the content of the patterns. @vs@ is the set
       -- of variables that have already appeared in the rule translation up to this point, @hvs@
@@ -272,7 +232,7 @@ translatePatterns facts factType filterFunction vars helperVars destructors =
                                                -- First create only the part of the translation that is 'get'
                                                -- or 'in', introducing new helper vars for all patterns.
                                                (factDoc, newHelperVars) = translatePatternFact prem factType vs hvs
-                                               
+
                                                -- For each pattern term, create the list of destructor expressions
                                                -- that extract its contents. @literals@ contains all non-pattern
                                                -- terms from the current fact, which have to be remembered together
@@ -285,12 +245,12 @@ translatePatterns facts factType filterFunction vars helperVars destructors =
                                                -- @makeDestructorExpressions@ and updated during the fold. The map
                                                -- of destructors is also updated continiuously.
                                                (destrDocList, newVars, newDestructors) = foldl (\(docs,vset,des) t -> let (doc,vset',des') = makeDestructorExpressions vset newHelperVars des t in (docs ++ [doc], vset `S.union` vset', des')) ([], (vs `S.union` literals), destrs) patternTerms
-                                               
+
                                                -- Then put all the docs together.
                                                factPlusDestructorsDoc = factDoc $-$ (vcat $ destrDocList)
 
                                                patternTerms = filter isPattern ts
-                                               literals = S.fromList (foldl (\acc t -> acc ++ getAtoms t) [] (filter (not . isPattern) ts))
+                                               literals = S.fromList (foldl (\acc t -> acc ++ (map show $ lits t)) [] (filter (not . isPattern) ts))
 
 
 translateNonPatterns :: HighlightDocument d => [LNFact] -> String -> (LNFact -> Bool) -> S.Set String -> ([d], S.Set String)
@@ -302,21 +262,11 @@ translateNonPatterns facts factType filterFunction vars =
       nonPatternFacts = filter filterFunction facts
       translate prem@(Fact _ _ ts) vs = (factDoc, atoms)
                                              where
-                                              factDoc = case factType of
-                                                "OUT"    -> if checkForNewIDs
-                                                              then idConstructor $-$ translateFact prem factType vs
-                                                              else translateFact prem factType vs
-                                                "INSERT" -> if checkForNewIDs
-                                                              then idConstructor $-$ translateFact prem factType vs
-                                                              else translateFact prem factType vs
-                                                "EVENT"  -> if checkForNewIDs
-                                                              then idConstructor $-$ translateFact prem factType vs
-                                                              else translateFact prem factType vs
-                                                _        -> translateFact prem factType vs
-                                              atoms = S.fromList (foldl (\acc t -> acc ++ getAtoms t) [] ts)
-                                              checkForNewIDs = if atoms `S.isSubsetOf` vs
-                                                                 then False
-                                                                 else foldl (\acc a -> acc || ((head a) == '$')) False $ S.difference atoms vs
+                                              factDoc = if (factType `elem` ["OUT", "INSERT", "EVENT"]) && checkForNewIDs
+                                                          then idConstructor $-$ translateFact prem factType vs
+                                                          else translateFact prem factType vs
+                                              atoms = S.fromList (foldl (\acc t -> acc ++ (map show $ lits t)) [] ts)
+                                              checkForNewIDs = not (atoms `S.isSubsetOf` vs) && any (('$' ==) . head) (atoms `S.difference` vs)
                                               idConstructor = idExp . S.toList $ S.difference atoms vs
                                               idExp as = vcat . map (\a -> text "in(publicChannel, " <> (text $ showAtom a) <> text ": bitstring);") . filter (\a -> (head a) == '$') $ as
 
@@ -344,9 +294,10 @@ translatePatternFact (Fact tag _ ts) factType vars helperVars =
         _     -> text "" --should never happen
 
 isReserved :: String -> Bool
-isReserved s = s `List.elem` reserved_words
-  where
-    reserved_words = ["among", "axiom", "channel", "choice", "clauses", "const", "def", "diff",
+isReserved s = s `List.elem` reservedWords
+
+reservedWords :: [String]
+reservedWords = ["among", "axiom", "channel", "choice", "clauses", "const", "def", "diff",
       "do", "elimtrue", "else", "equation", "equivalence", "event", "expand", "fail", "for",
       "forall", "foreach", "free", "fun", "get", "if", "implementation", "in", "inj-event",
       "insert", "lemma", "let", "letfun", "letproba", "new", "noninterf", "noselect", "not",
@@ -437,10 +388,10 @@ translatePatternTerm vars helperVars t = case viewTerm t of
                                                                    varDoc = text newVar
 
 makeDestructorDefinition :: (Show l) => Term l -> String
-makeDestructorDefinition t = 
+makeDestructorDefinition t =
   "forall " ++ intercalate ", " (map (++":bitstring") atoms) ++ ";#" ++ printTerm2 t
   where
-    atoms = map showAtom2 . S.toList . S.fromList $ getAtoms t
+    atoms = map showAtom2 . S.toList . S.fromList $ map show $ lits t
 
 makeVariable :: (Show l) => Term l -> M.Map String String -> (String, M.Map String String)
 makeVariable t varMap = case M.lookup (printTerm S.empty False t) varMap of
@@ -449,7 +400,7 @@ makeVariable t varMap = case M.lookup (printTerm S.empty False t) varMap of
                    newMap = M.insert (printTerm S.empty False t) newVar varMap
                  in
                (newVar, newMap)
-      
+
 -- | @makeDestructorName dMap t a@ looks up if a destructor that extracts @a@ from @t@ already exists
 --   in map @dMap@, and depending on the result returns the one that already exists or a newly created
 --   one, together with the (updated) map. Note that for the mapping we don't just print the term to
@@ -467,27 +418,22 @@ makeDestructorName dMap t a = case M.lookup ((makeDestructorDefinition t),a) dMa
                (newDestructor, newMap)
 
 makeDestructorExpressions :: (Document d, Show l, Ord l) => S.Set String -> M.Map String String -> M.Map (String, String) String -> Term l -> (d, S.Set String, M.Map (String, String) String)
-makeDestructorExpressions vars helperVars destructors t = 
+makeDestructorExpressions vars helperVars destructors t =
     ((vcat doclist), S.fromList atoms, newDestructors)
     where
       (doclist, newDestructors) = foldl (\(docs,destrs) a -> let (doc, destrs') = makeDestructorExpression vars helperVars destrs t a in (docs ++ [doc], destrs')) ([], destructors) atoms
-      atoms = nub $ getAtoms t
-
-getAtoms :: (Show l) => Term l -> [String]
-getAtoms t = case viewTerm t of
-    Lit l     -> [show l]
-    FApp _ ts -> foldl (\acc t -> acc ++ getAtoms t) [] ts
+      atoms = map show $ lits t
 
 makeDestructorExpression :: (Document d, Show l) => S.Set String -> M.Map String String -> M.Map (String, String) String -> Term l -> String -> (d, M.Map (String, String) String)
-makeDestructorExpression vars helperVars destructors t a = if (S.member a vars) || (head a == '\'')
-                                      then (oldVarDoc, newDestructors)
-                                      else (newVarDoc, newDestructors)
-                                      where
-                                        (var, _) = makeVariable t helperVars
-                                        (destr, newDestructors) = makeDestructorName destructors t a
-                                        oldVarDoc = text "let (=" <> (text $ showAtom a) <>
-                                                text ") =" <-> text destr <> 
-                                                text "(" <> text var <> text ") in"
-                                        newVarDoc = text "let" <-> (text $ showAtom a) <->
-                                                 text "=" <-> text destr <> 
-                                                 text "(" <> text var <> text ") in"
+makeDestructorExpression vars helperVars destructors t a = do
+                                        let (var, _) = makeVariable t helperVars
+                                        let (destr, newDestructors) = makeDestructorName destructors t a
+                                        if (S.member a vars) || (head a == '\'')
+                                          then
+                                            (text "let (=" <> text (showAtom a) <>
+                                              text ") =" <-> text destr <>
+                                              text "(" <> text var <> text ") in", newDestructors)
+                                          else    
+                                            (text "let" <-> text (showAtom a) <->
+                                              text "=" <-> text destr <>
+                                              text "(" <> text var <> text ") in", newDestructors)
