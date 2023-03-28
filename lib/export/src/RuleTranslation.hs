@@ -407,12 +407,12 @@ makeDestructorExpression :: (Document d, Show l) => S.Set String -> M.Map String
 makeDestructorExpression vars helperVars destructors t a = do
                                         let (var, _) = makeVariable t helperVars
                                         let (destr, newDestructors) = makeDestructorName destructors t a
-                                        if (S.member a vars) || (head a == '\'')
+                                        (if (S.member a vars) || (head a == '\'')
                                           then
-                                            (text "let (=" <> text (showAtom a) <>
+                                            text "let (=" <> text (showAtom a) <>
                                               text ") =" <-> text destr <>
-                                              text "(" <> text var <> text ") in", newDestructors)
-                                          else    
-                                            (text "let" <-> text (showAtom a) <->
+                                              text "(" <> text var <> text ") in"
+                                          else
+                                            text "let" <-> text (showAtom a) <->
                                               text "=" <-> text destr <>
                                               text "(" <> text var <> text ") in", newDestructors)
