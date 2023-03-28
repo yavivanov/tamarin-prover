@@ -268,7 +268,7 @@ translateNonPatterns facts factType filterFunction vars =
 translateFact :: Document d => LNFact -> String -> S.Set String -> d
 translateFact (Fact tag _ ts) factType vars = case factType of
     "GET"    -> text "get" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm vars True) ts) <> text ") in"
-    "IN"     -> if (head $ printTerm vars True (head ts)) == '='
+    "IN"     -> if (head $ printTerm showAtom vars True (head ts)) == '='
                   then text "in(publicChannel," <-> (translateTerm vars True (head ts)) <> text ")"
                   else text "in(publicChannel," <-> (translateTerm vars True (head ts)) <> text ": bitstring)"
     "NEW"    -> text "new" <-> (translateTerm S.empty False (head ts)) <> text ": bitstring"
@@ -337,12 +337,12 @@ showEventName :: FactTag -> String
 showEventName tag = 'e' : factTagName tag
 
 translateTerm :: (Document d, Show l) => S.Set String -> Bool -> Term l -> d
-translateTerm vars checkEq t = text $ printTerm vars checkEq t
+translateTerm vars checkEq t = text $ printTerm showAtom vars checkEq t
 
-printTerm :: (Show l) => S.Set String -> Bool -> Term l -> String
-printTerm vars checkEq t = case viewTerm t of
-    Lit l | checkEq && (S.member (show l) vars || head (show l) == '\'') -> '=' : (showAtom $ show l)
-    Lit l                                           -> showAtom $ show l
+printTerm :: (Show l) => (String -> String) -> S.Set String -> Bool -> Term l -> String
+printTerm shAtom vars checkEq t = case viewTerm t of
+    Lit l | checkEq && (S.member (show l) vars || head (show l) == '\'') -> '=' : (shAtom $ show l)
+    Lit l                                           -> shAtom $ show l
     FApp (AC Mult)     ts                           -> printAC "mult" ts
     FApp (AC Union)    ts                           -> printAC "union" ts
     FApp (AC Xor)      ts                           -> printAC "xor" ts
@@ -351,26 +351,11 @@ printTerm vars checkEq t = case viewTerm t of
     FApp (C EMap)      ts                           -> "em" ++ printList ts
     FApp List          ts                           -> printList ts
     where
-      printList ts = "(" ++ (intercalate ", " $ map (printTerm vars checkEq) ts) ++ ")"
-      printPair [t1,t2] = "(" ++ printTerm vars checkEq t1 ++ ", " ++ printTerm vars checkEq t2 ++ ")"
-      printAC op [t1,t2] = op ++ "(" ++ printTerm vars checkEq t1 ++ ", " ++ printTerm vars checkEq t2 ++ ")"
-      printAC op (t:ts) = op ++ "(" ++ printTerm vars checkEq t ++ ", " ++ printAC op ts ++ ")"
+      printList ts = "(" ++ (intercalate ", " $ map (printTerm shAtom vars checkEq) ts) ++ ")"
+      printPair [t1,t2] = "(" ++ printTerm shAtom vars checkEq t1 ++ ", " ++ printTerm shAtom vars checkEq t2 ++ ")"
+      printAC op [t1,t2] = op ++ "(" ++ printTerm shAtom vars checkEq t1 ++ ", " ++ printTerm shAtom vars checkEq t2 ++ ")"
+      printAC op (t:ts) = op ++ "(" ++ printTerm shAtom vars checkEq t ++ ", " ++ printAC op ts ++ ")"
 
-printTerm2 :: (Show l) => Term l -> String
-printTerm2 t = case viewTerm t of
-    Lit l                                           -> showAtom2 $ show l
-    FApp (AC Mult)     ts                           -> printAC "mult" ts
-    FApp (AC Union)    ts                           -> printAC "union" ts
-    FApp (AC Xor)      ts                           -> printAC "xor" ts
-    FApp (NoEq (f, _)) ts | (BC.unpack f == "pair") -> printPair ts
-    FApp (NoEq (f, _)) ts                           -> (showFunction $ BC.unpack f) ++ printList ts
-    FApp (C EMap)      ts                           -> "em" ++ printList ts
-    FApp List          ts                           -> printList ts
-    where
-      printList ts = "(" ++ (intercalate ", " $ map printTerm2 ts) ++ ")"
-      printPair [t1,t2] = "(" ++ printTerm2 t1 ++ ", " ++ printTerm2 t2 ++ ")"
-      printAC op [t1,t2] = op ++ "(" ++ printTerm2 t1 ++ ", " ++ printTerm2 t2 ++ ")"
-      printAC op (t:ts) = op ++ "(" ++ printTerm2 t ++ ", " ++ printAC op ts ++ ")"
 
 translatePatternTerm :: (Document d, Show l) => S.Set String -> M.Map String String -> Term l -> (d, M.Map String String)
 translatePatternTerm vars helperVars t = case viewTerm t of
@@ -383,15 +368,15 @@ translatePatternTerm vars helperVars t = case viewTerm t of
 
 makeDestructorDefinition :: (Show l) => Term l -> String
 makeDestructorDefinition t =
-  "forall " ++ intercalate ", " (map (++":bitstring") atoms) ++ ";#" ++ printTerm2 t
+  "forall " ++ intercalate ", " (map (++":bitstring") atoms) ++ ";#" ++ printTerm showAtom2 S.empty False t
   where
     atoms = map showAtom2 . S.toList . S.fromList $ map show $ lits t
 
 makeVariable :: (Show l) => Term l -> M.Map String String -> (String, M.Map String String)
-makeVariable t varMap = case M.lookup (printTerm S.empty False t) varMap of
+makeVariable t varMap = case M.lookup (printTerm showAtom S.empty False t) varMap of
     Just v  -> (v, varMap)
     Nothing -> let newVar = "helperVar" ++ (show $ M.size varMap)
-                   newMap = M.insert (printTerm S.empty False t) newVar varMap
+                   newMap = M.insert (printTerm showAtom S.empty False t) newVar varMap
                  in
                (newVar, newMap)
 
