@@ -7,7 +7,6 @@ packages:
 - lib/sapic/
 - lib/export/
 - lib/accountability/
-- lib/rule-translation/
 resolver: lts-19.32
 ghc-options:
   "$everything": -Wall
