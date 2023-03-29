@@ -62,23 +62,26 @@ makeDestructorHeader ((dDef, atom), dName) =
 makeHeadersFromRule :: OpenProtoRule -> OpenTheory -> ([(String, String, String, [String])], [(String, String)], [(String, String)])
 makeHeadersFromRule (OpenProtoRule ruE _) = makeHeadersFromProtoRule ruE
 
+notDiffRuleActs :: Rule ProtoRuleEInfo -> [Fact LNTerm]
+notDiffRuleActs ru = filter isNotDiffAnnotation (L.get rActs ru)
+  where
+    isNotDiffAnnotation fa = fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []}
+
 makeHeadersFromProtoRule :: Rule ProtoRuleEInfo -> OpenTheory -> ([(String, String, String, [String])], [(String, String)], [(String, String)])
 makeHeadersFromProtoRule ru thy =
-  (frees, tables, events)
+  (freeHeaders, tables, events)
     where
-    acts             = filter isNotDiffAnnotation (L.get rActs ru)
-    isNotDiffAnnotation fa = fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []}
     facts proj     = L.get proj ru
-    frees = makeFreeHeaders (facts rPrems) acts (facts rConcs) thy
+    freeHeaders = makeFreeHeaders (facts rPrems) (notDiffRuleActs ru) (facts rConcs) thy
     tables = makeTableHeaders (facts rPrems) (facts rConcs)
-    events = makeEventHeaders acts
+    events = makeEventHeaders (notDiffRuleActs ru)
 
 makeFreeHeaders :: [LNFact] -> [LNFact] -> [LNFact] -> OpenTheory -> [(String, String, String, [String])]
-makeFreeHeaders prems acts concls thy =
+makeFreeHeaders rprems racts rconcls thy =
   headers
   where
     getTerms (Fact _ _ ts) = ts
-    allTerms = concatMap getTerms prems ++ concatMap getTerms acts ++ concatMap getTerms concls
+    allTerms = concatMap getTerms rprems ++ concatMap getTerms racts ++ concatMap getTerms rconcls
     term_bitstrings = foldl (\acc t -> S.union acc $ searchTermForBitstrings t) S.empty (S.toList $ S.fromList allTerms)
     lemmas = map (L.get lFormula) (theoryLemmas thy)
     lemma_bitstrings = foldl (\acc l -> S.union acc $ searchLemmaForBitstrings l) S.empty lemmas
@@ -96,23 +99,23 @@ searchLemmaForBitstrings (Qua _ _ fm) = searchLemmaForBitstrings fm
 searchTermForBitstrings :: (Show l) => Term l -> S.Set String
 searchTermForBitstrings t = case viewTerm t of
     Lit l     -> if head (show l) == '\'' && last (show l) == '\'' then S.fromList [showAtom $ show l] else S.empty
-    FApp _ ts -> foldl (\acc t -> S.union acc $ searchTermForBitstrings t) S.empty ts
+    FApp _ ts -> foldl (\acc tr -> S.union acc $ searchTermForBitstrings tr) S.empty ts
 
 makeTableHeaders :: [LNFact] -> [LNFact] -> [(String, String)]
-makeTableHeaders prems concls =
+makeTableHeaders rprems rconcls =
   headers
   where
     getFactInfo (Fact tag _ ts) = (showFactName tag, length ts)
-    allFactInfos = S.toList $ S.fromList (map getFactInfo prems ++ map getFactInfo concls)
+    allFactInfos = S.toList $ S.fromList (map getFactInfo rprems ++ map getFactInfo rconcls)
     tableInfos = filter (\(t, _) -> t /= "Fr" && t /= "Out" && t /= "In") allFactInfos
     headers = map (\(t,n) -> (t, "(" ++ intercalate ", " (replicate n "bitstring") ++ ")")) tableInfos
 
 makeEventHeaders :: [LNFact] -> [(String, String)]
-makeEventHeaders acts =
+makeEventHeaders racts =
   headers
   where
     getFactInfo (Fact tag _ ts) = (showEventName tag, length ts)
-    allFactInfos = S.toList $ S.fromList (map getFactInfo acts)
+    allFactInfos = S.toList $ S.fromList (map getFactInfo racts)
     headers = map (\(t,n) -> (t, "(" ++ intercalate ", " (replicate n "bitstring") ++ ")")) allFactInfos
 
 ------------------------------------------------------------------------------
@@ -127,35 +130,31 @@ translateOpenProtoRule (OpenProtoRule ruE _) thy = translateProtoRule (checkType
 checkTypes :: Rule ProtoRuleEInfo -> OpenTheory -> Rule ProtoRuleEInfo
 checkTypes ru thy = if null incorrectFunctionUsages then ru else throw $ UnsupportedTypes incorrectFunctionUsages
   where
-    acts             = filter isNotDiffAnnotation (L.get rActs ru)
-    isNotDiffAnnotation fa = fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []}
     facts proj     = L.get proj ru
-    allFacts = facts rPrems ++ acts ++ facts rConcs
+    allFacts = facts rPrems ++ notDiffRuleActs ru ++ facts rConcs
     allTerms = foldl (\acc (Fact _ _ ts) -> acc ++ ts) [] allFacts
     incorrectFunctionUsages = S.toList . S.fromList $ foldl (\acc t -> acc ++ incorrectTermTypes thy t) [] allTerms
 
 incorrectTermTypes :: (Show l) => OpenTheory -> Term l -> [String]
 incorrectTermTypes thy t = case viewTerm t of
-    Lit l                 -> []
+    Lit _                 -> []
     FApp (NoEq (f, _)) ts -> checkFun (BC.unpack f) ++ foldl (\acc x -> acc ++ incorrectTermTypes thy x) [] ts
     FApp _             ts -> foldl (\acc x -> acc ++ incorrectTermTypes thy x) [] ts
     where
       functionInfo = theoryFunctionTypingInfos thy
       checkFun name = concatMap (\(_ , inTypes, outTypes) -> typeChecker name inTypes outTypes) $ filter (\((f,_), _, _) -> BC.unpack f == name) functionInfo
       typeChecker name _ (Just _)             = [name]
-      typeChecker name [] _                   = []
+      typeChecker _ [] _                   = []
       typeChecker name (Nothing : ts) outType = typeChecker name ts outType
-      typeChecker name (Just _ : ts) _        = [name]
+      typeChecker name (Just _ : _) _        = [name]
 
 translateProtoRule :: (HighlightDocument d)
                 => Rule ProtoRuleEInfo -> M.Map (String, String) String -> (d, M.Map (String, String) String)
 translateProtoRule ru de =
     (ruleDoc, destructors)
     where
-    acts             = filter isNotDiffAnnotation (L.get rActs ru)
-    isNotDiffAnnotation fa = fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []}
     facts proj     = L.get proj ru
-    (factsDoc,destructors) = translateRule (facts rPrems) acts (facts rConcs) de
+    (factsDoc,destructors) = translateRule (facts rPrems) (notDiffRuleActs ru) (facts rConcs) de
     ruleDoc = text "let" <-> (text . showRuleName . L.get preName $ L.get rInfo ru) <-> text "=" $-$
               nest 8
               factsDoc
@@ -165,15 +164,15 @@ showRuleName FreshRule = "rFresh"
 showRuleName (StandRule s) = "r" ++ s
 
 translateRule :: (HighlightDocument d) => [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)
-translateRule prems acts concls destrs =
-    let (docs1, vars1, vars1', destr1) = translatePatterns prems "GET" patternGetsFilter S.empty M.empty destrs
-        (docs2, vars2) = translateNonPatterns prems "GET" nonPatternGetsFilter vars1
-        (docs3, vars3, _, destr3) = translatePatterns prems "IN" patternInsFilter vars2 vars1' destr1
-        (docs4, vars4) = translateNonPatterns prems "IN" nonPatternInsFilter vars3
-        (docs5, vars5) = translateNonPatterns prems "NEW" isFrFact vars4
-        (docs6, vars6) = translateNonPatterns acts "EVENT" (const True) vars5
-        (docs7, vars7) = translateNonPatterns (concls \\ prems) "INSERT" isStorage vars6
-        (docs8, _) = translateNonPatterns concls "OUT" isOutFact vars7
+translateRule rprems racts rconcls destrs =
+    let (docs1, vars1, vars1', destr1) = translatePatterns rprems "GET" patternGetsFilter S.empty M.empty destrs
+        (docs2, vars2) = translateNonPatterns rprems "GET" nonPatternGetsFilter vars1
+        (docs3, vars3, _, destr3) = translatePatterns rprems "IN" patternInsFilter vars2 vars1' destr1
+        (docs4, vars4) = translateNonPatterns rprems "IN" nonPatternInsFilter vars3
+        (docs5, vars5) = translateNonPatterns rprems "NEW" isFrFact vars4
+        (docs6, vars6) = translateNonPatterns racts "EVENT" (const True) vars5
+        (docs7, vars7) = translateNonPatterns (rconcls \\ rprems) "INSERT" isStorage vars6
+        (docs8, _) = translateNonPatterns rconcls "OUT" isOutFact vars7
       in
     (combineRuleDocs (docs1++docs2++docs3) (docs4++docs5++docs6++docs7++docs8), destr3)
 
@@ -309,9 +308,9 @@ showAtom a = case head a of
   _    -> sanitizeAtom $ replaceDots a
   where
     replaceDots = map (\c -> if c == '.' then '_' else c)
-    sanitizeAtom a = if isReserved a || Data.Char.isDigit (head a)
-                       then 'a' : a
-                       else a
+    sanitizeAtom at = if isReserved at || Data.Char.isDigit (head at)
+                       then 'a' : at
+                       else at
 
 showAtom2 :: String -> String
 showAtom2 a = case head a of
@@ -348,15 +347,15 @@ printTerm shAtom vars checkEq t = case viewTerm t of
     FApp (AC Mult)     ts                           -> printAC "mult" ts
     FApp (AC Union)    ts                           -> printAC "union" ts
     FApp (AC Xor)      ts                           -> printAC "xor" ts
-    FApp (NoEq (f, _)) ts | BC.unpack f == "pair" -> printPair ts
+    FApp (NoEq (f, _)) ts | BC.unpack f == "pair"   -> printAC "" ts
     FApp (NoEq (f, _)) ts                           -> showFunction (BC.unpack f) ++ printList ts
     FApp (C EMap)      ts                           -> "em" ++ printList ts
     FApp List          ts                           -> printList ts
     where
       printList ts = "(" ++ intercalate ", " (map (printTerm shAtom vars checkEq) ts) ++ ")"
-      printPair [t1,t2] = "(" ++ printTerm shAtom vars checkEq t1 ++ ", " ++ printTerm shAtom vars checkEq t2 ++ ")"
       printAC op [t1,t2] = op ++ "(" ++ printTerm shAtom vars checkEq t1 ++ ", " ++ printTerm shAtom vars checkEq t2 ++ ")"
-      printAC op (t:ts) = op ++ "(" ++ printTerm shAtom vars checkEq t ++ ", " ++ printAC op ts ++ ")"
+      printAC op (tr:trs) = op ++ "(" ++ printTerm shAtom vars checkEq tr ++ ", " ++ printAC op trs ++ ")"
+      printAC _ _ = error "printAC: one or both lists are empty"
 
 
 translatePatternTerm :: (Document d, Show l) => S.Set String -> M.Map String String -> Term l -> (d, M.Map String String)
