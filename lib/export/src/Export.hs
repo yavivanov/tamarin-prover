@@ -1164,7 +1164,8 @@ prettyProVerifHeader (Fun fkind name _ symtype attr) =
 
 prettyDeepSecHeader :: ProVerifHeader -> Doc
 prettyDeepSecHeader (Type _) = text "" -- no types in deepsec
-prettyDeepSecHeader (Eq eqtype _ eq _) = text eqtype <> text " " <> text eq <> text "."
+prettyDeepSecHeader (Eq "reduc" _ eq _) = text "reduc" <> text " " <> text eq <> text "." 
+prettyDeepSecHeader (Eq eqtype _ eq _) = error $ "Deepsec does not support equations ATM: " ++ eqtype ++ " " ++ eq
 prettyDeepSecHeader (HEvent _ _) = text ""
 prettyDeepSecHeader (Table _ _) = text ""
 -- drop symtypes in symbol declarations
