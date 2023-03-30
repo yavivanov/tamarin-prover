@@ -11,6 +11,7 @@ module Sapic.Facts (
    , TransFact(..)
    , SpecialPosition(..)
    , AnnotatedRule(..)
+   , FactType(..)
    , mapAct
    , StateKind(..)
    , isSemiState
@@ -126,6 +127,10 @@ data AnnotatedRule ann = AnnotatedRule {
     , restr        :: [SyntacticLNFormula]
     , index        :: Int             -- Index to distinguish multiple rules originating from the same process
 }
+
+-- | Fact types used by the MSR to ProverIf translation.
+data FactType = GET | IN | NEW | EVENT | INSERT | OUT
+  deriving Eq
 
 -- | applies function acting on rule taple on annotated rule.
 mapAct :: (([TransFact], [TransAction], [TransFact],[SyntacticLNFormula])

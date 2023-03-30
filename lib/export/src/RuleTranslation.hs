@@ -165,14 +165,14 @@ showRuleName (StandRule s) = "r" ++ s
 
 translateRule :: (HighlightDocument d) => [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)
 translateRule rprems racts rconcls destrs =
-    let (docs1, vars1, vars1', destr1) = translatePatterns rprems "GET" patternGetsFilter S.empty M.empty destrs
-        (docs2, vars2) = translateNonPatterns rprems "GET" nonPatternGetsFilter vars1
-        (docs3, vars3, _, destr3) = translatePatterns rprems "IN" patternInsFilter vars2 vars1' destr1
-        (docs4, vars4) = translateNonPatterns rprems "IN" nonPatternInsFilter vars3
-        (docs5, vars5) = translateNonPatterns rprems "NEW" isFrFact vars4
-        (docs6, vars6) = translateNonPatterns racts "EVENT" (const True) vars5
-        (docs7, vars7) = translateNonPatterns (rconcls \\ rprems) "INSERT" isStorage vars6
-        (docs8, _) = translateNonPatterns rconcls "OUT" isOutFact vars7
+    let (docs1, vars1, vars1', destr1) = translatePatterns rprems GET patternGetsFilter S.empty M.empty destrs
+        (docs2, vars2) = translateNonPatterns rprems GET nonPatternGetsFilter vars1
+        (docs3, vars3, _, destr3) = translatePatterns rprems IN patternInsFilter vars2 vars1' destr1
+        (docs4, vars4) = translateNonPatterns rprems IN nonPatternInsFilter vars3
+        (docs5, vars5) = translateNonPatterns rprems NEW isFrFact vars4
+        (docs6, vars6) = translateNonPatterns racts EVENT (const True) vars5
+        (docs7, vars7) = translateNonPatterns (rconcls \\ rprems) INSERT isStorage vars6
+        (docs8, _) = translateNonPatterns rconcls OUT isOutFact vars7
       in
     (combineRuleDocs (docs1++docs2++docs3) (docs4++docs5++docs6++docs7++docs8), destr3)
 
@@ -203,7 +203,7 @@ nonPatternGetsFilter p = isStorage p && not (hasPattern p)
 --   Also returns the updated set of variables for the current rule translation (including the ones
 --   seen here for the first time), as well as the updated set of helper vars for this rule
 --   translation and the updated map of destructors.
-translatePatterns :: (HighlightDocument d) => [LNFact] -> String -> (LNFact -> Bool) -> S.Set String -> M.Map String String -> M.Map (String, String) String -> ([d], S.Set String, M.Map String String, M.Map (String, String) String)
+translatePatterns :: (HighlightDocument d) => [LNFact] -> FactType -> (LNFact -> Bool) -> S.Set String -> M.Map String String -> M.Map (String, String) String -> ([d], S.Set String, M.Map String String, M.Map (String, String) String)
 translatePatterns facts factType filterFunction vars helperVars destructors =
     -- Translate all selected pattern facts, while keeping track of the variables that have already
     -- appeared and also continuously updating the maps with the helper vars and the destructors.
@@ -247,7 +247,7 @@ translatePatterns facts factType filterFunction vars helperVars destructors =
                                                literals = S.fromList (foldl (\acc t -> acc ++ map show (lits t)) [] (filter (not . isPattern) ts))
 
 
-translateNonPatterns :: HighlightDocument d => [LNFact] -> String -> (LNFact -> Bool) -> S.Set String -> ([d], S.Set String)
+translateNonPatterns :: HighlightDocument d => [LNFact] -> FactType -> (LNFact -> Bool) -> S.Set String -> ([d], S.Set String)
 translateNonPatterns facts factType filterFunction vars =
     let (doclist, finalvars) = foldl (\(d1, v1) g -> let (d2, v2) = translate g v1 in (d1 ++ [d2], S.union v1 v2)) ([], vars) nonPatternFacts
      in
@@ -256,7 +256,7 @@ translateNonPatterns facts factType filterFunction vars =
       nonPatternFacts = filter filterFunction facts
       translate prem@(Fact _ _ ts) vs = (factDoc, atoms)
                                              where
-                                               factDoc = if factType `elem` ["OUT", "INSERT", "EVENT"] && checkForNewIDs
+                                               factDoc = if factType `elem` [OUT, INSERT, EVENT] && checkForNewIDs
                                                           then idConstructor $-$ translateFact prem factType vs
                                                           else translateFact prem factType vs
                                                atoms = S.fromList (foldl (\acc t -> acc ++ map show (lits t)) [] ts)
@@ -266,27 +266,26 @@ translateNonPatterns facts factType filterFunction vars =
 
 
 
-translateFact :: Document d => LNFact -> String -> S.Set String -> d
+translateFact :: Document d => LNFact -> FactType -> S.Set String -> d
 translateFact (Fact tag _ ts) factType vars = case factType of
-    "GET"    -> text "get" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm vars True) ts) <> text ") in"
-    "IN"     -> if head (printTerm showAtom vars True (head ts)) == '='
+    GET    -> text "get" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm vars True) ts) <> text ") in"
+    IN     -> if head (printTerm showAtom vars True (head ts)) == '='
                   then text "in(publicChannel," <-> translateTerm vars True (head ts) <> text ")"
                   else text "in(publicChannel," <-> translateTerm vars True (head ts) <> text ": bitstring)"
-    "NEW"    -> text "new" <-> translateTerm S.empty False (head ts) <> text ": bitstring"
-    "INSERT" -> text "insert" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm S.empty False) ts) <> text ")"
-    "OUT"    -> text "out(publicChannel," <-> translateTerm S.empty False (head ts) <> text ")"
-    "EVENT"  -> text "event" <-> text (showEventName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm S.empty False) ts) <> text ")"
-    _        -> text "" --should never happen
+    NEW    -> text "new" <-> translateTerm S.empty False (head ts) <> text ": bitstring"
+    INSERT -> text "insert" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm S.empty False) ts) <> text ")"
+    OUT    -> text "out(publicChannel," <-> translateTerm S.empty False (head ts) <> text ")"
+    EVENT  -> text "event" <-> text (showEventName tag) <> text "(" <> (fsep . punctuate comma $ map (translateTerm S.empty False) ts) <> text ")"
 
-translatePatternFact :: (Document d) => LNFact -> String -> S.Set String -> M.Map String String -> (d, M.Map String String)
+translatePatternFact :: (Document d) => LNFact -> FactType -> S.Set String -> M.Map String String -> (d, M.Map String String)
 translatePatternFact (Fact tag _ ts) factType vars helperVars =
     (factDoc, newHelperVars)
     where
       (doclist, newHelperVars) = foldl (\(docs, helpers) t -> let (doc, helpers') = translatePatternTerm vars helpers t in (docs ++ [doc], helpers')) ([], helperVars) ts
       factDoc = case factType of
-        "GET" -> text "get" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ doclist) <> text ") in"
-        "IN"  -> text "in(publicChannel," <-> head doclist <> text ": bitstring);"
-        _     -> text "" --should never happen
+        GET -> text "get" <-> text (showFactName tag) <> text "(" <> (fsep . punctuate comma $ doclist) <> text ") in"
+        IN  -> text "in(publicChannel," <-> head doclist <> text ": bitstring);"
+        _   -> error "translatePatternFact: fact with type other than GET or IN" -- should not happen
 
 isReserved :: String -> Bool
 isReserved s = s `List.elem` reservedWords

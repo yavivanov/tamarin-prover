@@ -229,6 +229,7 @@ ppPubName (NameId "zero") = text "0"
 ppPubName (NameId "one") = text "1"
 ppPubName (NameId "g") = text "g"
 ppPubName (NameId t) = text $ "s" ++ t
+
 -- Loader of the export functions
 ------------------------------------------------------------------------------
 loadQueries :: Theory sig c b p TranslationElement -> [Doc]
