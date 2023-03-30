@@ -29,6 +29,7 @@ import           Data.Monoid                         (Sum(..))
 import           Theory.Text.Pretty
 import OpenTheory
 import Pretty
+import Theory.Constraint.System (defaultOracleName, defaultOracleNames)
 
 ------------------------------------------------------------------------------
 -- Closed theory querying / construction / modification
@@ -99,6 +100,7 @@ getProofContext l thy = ProofContext
     ( L.get (cases . thyCache)                 thy)
     inductionHint
     specifiedHeuristic
+    specifiedTactic
     (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
     (L.get lName l)
     ([ h | HideLemma h <- L.get lAttributes l])
@@ -117,11 +119,18 @@ getProofContext l thy = ProofContext
     specifiedHeuristic = case lattr of
         Nothing  -> case L.get thyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just . Heuristic $ map (defaultOracleName (L.get thyInFile thy)) gh
+                    gh -> Just $ Heuristic $ map (defaultOracleName (L.get thyInFile thy)) gh
         lh -> defaultOracleNames lh (L.get thyInFile thy)
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
+
+    -- Tactic specified for the lemma
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get thyTactic thy
 
 -- | Get the proof context for a lemma of the closed theory.
 getProofContextDiff :: Side -> Lemma a -> ClosedDiffTheory -> ProofContext
@@ -134,6 +143,7 @@ getProofContextDiff s l thy = case s of
             ( L.get (cases . diffThyCacheLeft)                 thy)
             inductionHint
             specifiedHeuristic
+            specifiedTactic
             (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
             (L.get lName l)
             ([ h | HideLemma h <- L.get lAttributes l])
@@ -148,6 +158,7 @@ getProofContextDiff s l thy = case s of
             ( L.get (cases . diffThyCacheRight)              thy)
             inductionHint
             specifiedHeuristic
+            specifiedTactic
             (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
             (L.get lName l)
             ([ h | HideLemma h <- L.get lAttributes l])
@@ -165,11 +176,17 @@ getProofContextDiff s l thy = case s of
     specifiedHeuristic = case lattr of
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just . Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
-        lh -> defaultOracleNames lh (L.get diffThyInFile thy)
+                    gh -> Just $ Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
+        lh  -> defaultOracleNames lh (L.get diffThyInFile thy)
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
+
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get diffThyTactic thy
 
 -- | Get the proof context for a diff lemma of the closed theory.
 getDiffProofContext :: DiffLemma a -> ClosedDiffTheory -> DiffProofContext
@@ -198,6 +215,7 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             ( L.get (crcRefinedSources . diffThyDiffCacheLeft)              thy)
             AvoidInduction
             specifiedHeuristic
+            specifiedTactic
             ExistsNoTrace
             ( L.get lDiffName l )
             ([ h | HideLemma h <- L.get lDiffAttributes l])
@@ -212,6 +230,7 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             ( L.get (crcRefinedSources . diffThyDiffCacheRight)              thy)
             AvoidInduction
             specifiedHeuristic
+            specifiedTactic
             ExistsNoTrace
             ( L.get lDiffName l )
             ([ h | HideLemma h <- L.get lDiffAttributes l])
@@ -222,11 +241,17 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
     specifiedHeuristic = case lattr of
         Nothing  -> case L.get diffThyHeuristic thy of
                     [] -> Nothing
-                    gh -> Just . Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
+                    gh -> Just $ Heuristic $ map (defaultOracleName (L.get diffThyInFile thy)) gh
         lh -> defaultOracleNames lh (L.get diffThyInFile thy)
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lDiffAttributes l])
+
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get diffThyTactic thy
 
 -- | The facts with injective instances in this theory
 getInjectiveFactInsts :: ClosedTheory -> S.Set FactTag
@@ -357,6 +382,7 @@ prettyClosedTheory thy = if containsManualRuleVariants mergedRules
     thy' = Theory {_thyName=(L.get thyName thy)
             ,_thyInFile=(L.get thyInFile thy)
             ,_thyHeuristic=(L.get thyHeuristic thy)
+            ,_thyTactic=(L.get thyTactic thy)
             ,_thySignature=(L.get thySignature thy)
             ,_thyCache=(L.get thyCache thy)
             ,_thyItems = mergedRules
@@ -395,6 +421,7 @@ prettyClosedDiffTheory thy = if containsManualRuleVariantsDiff mergedRules
     thy' = DiffTheory {_diffThyName=(L.get diffThyName thy)
             ,_diffThyInFile=(L.get diffThyInFile thy)
             ,_diffThyHeuristic=(L.get diffThyHeuristic thy)
+            ,_diffThyTactic=(L.get diffThyTactic thy)
             ,_diffThySignature=(L.get diffThySignature thy)
             ,_diffThyCacheLeft=(L.get diffThyCacheLeft thy)
             ,_diffThyCacheRight=(L.get diffThyCacheRight thy)
