@@ -272,7 +272,6 @@ isOutFact :: Fact t -> Bool
 isOutFact (Fact OutFact _ _) = True
 isOutFact _                 = False
 
-
 isFrFact :: Fact t -> Bool
 isFrFact (Fact FreshFact _ _) = True
 isFrFact _                 = False

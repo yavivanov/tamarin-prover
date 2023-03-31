@@ -88,7 +88,7 @@ translationWarning s cont = unsafePerformIO printWarning
     printWarning = do
       hPutStr stderr $ "WARNING: " ++ s
       return cont
-
+                    
 ------------------------------------------------------------------------------
 -- Core Proverif Export
 ------------------------------------------------------------------------------

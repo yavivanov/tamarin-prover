@@ -97,10 +97,10 @@ instance (Show p) => Show (SapicException p) where
                               ++ "."
 
 prettySapicException :: (Show an, HighlightDocument d, GoodAnnotation an) => SapicException (LProcess an) -> d
-prettySapicException (ProcessNotWellformed e p) = text (show e) <-> maybe emptyDoc ppP p
+prettySapicException (ProcessNotWellformed e p) = text (show e) <-> maybe emptyDoc ppP p 
     where ppP = prettyProcess . toProcess
-prettySapicException o = text (show o)
-
+prettySapicException o = text (show o) 
+        
 instance Show WFerror where
     show (WFUnbound varset) =
                    "The variable(s) "
@@ -135,7 +135,7 @@ instance Show WFerror where
                               ++ prettySapicFunType t2
                               ++ "."
     show (FunctionNotDefined sym ) = "Function not defined " ++ show sym
-
+        
 
 instance Exception WFerror
 instance (Typeable a, Show a) => Exception (SapicException a)
