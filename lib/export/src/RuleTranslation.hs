@@ -401,18 +401,18 @@ makeDestructorExpressions vars helperVars destructors t =
     (vcat doclist, S.fromList atoms, newDestructors)
     where
       (doclist, newDestructors) = foldl (\(docs,destrs) a -> let (doc, destrs') = makeDestructorExpression vars helperVars destrs t a in (docs ++ [doc], destrs')) ([], destructors) atoms
-      atoms = map show $ lits t
+      atoms = nub $ map show $ lits t
 
 makeDestructorExpression :: (Document d, Show l) => S.Set String -> M.Map String String -> M.Map (String, String) String -> Term l -> String -> (d, M.Map (String, String) String)
-makeDestructorExpression vars helperVars destructors t a = do
-                                        let (var, _) = makeVariable t helperVars
-                                        let (destr, newDestructors) = makeDestructorName destructors t a
-                                        (if S.member a vars || head a == '\''
-                                          then
-                                            text "let (=" <> text (showAtom a) <>
-                                              text ") =" <-> text destr <>
-                                              text "(" <> text var <> text ") in"
-                                          else
-                                            text "let" <-> text (showAtom a) <->
-                                              text "=" <-> text destr <>
-                                              text "(" <> text var <> text ") in", newDestructors)
+makeDestructorExpression vars helperVars destructors t a = (varDoc, newDestructors)
+                                      where
+                                        (var, _) = makeVariable t helperVars
+                                        (destr, newDestructors) = makeDestructorName destructors t a
+                                        varDoc = (if S.member a vars || (head a == '\'')
+                                                   then
+                                                     text "let (=" <> text (showAtom a) <>
+                                                     text ") ="
+                                                   else
+                                                     text "let" <-> text (showAtom a) <->
+                                                     text "="
+                                                  ) <-> text destr <> text "(" <> text var <> text ") in"
