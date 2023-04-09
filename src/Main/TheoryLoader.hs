@@ -89,6 +89,7 @@ import           Items.OptionItem                    (openChainsLimit,saturation
 import Data.Maybe (fromMaybe, isNothing)
 
 
+
 ------------------------------------------------------------------------------
 -- Theory loading: shared between interactive and batch mode
 ------------------------------------------------------------------------------
@@ -134,6 +135,9 @@ theoryLoadFlags =
 
   , flagOpt "" ["oraclename"] (updateArg "oraclename") "FILE"
       ("Path to the oracle heuristic (default '" ++ "theory_filename.oracle" ++ "')")
+
+  , flagNone ["quiet"] (addEmptyArg "quiet")
+      "Do not display computation steps of oracle or tactic."
 
   , flagNone ["quiet"] (addEmptyArg "quiet")
       "Do not display computation steps of oracle or tactic."
@@ -245,10 +249,8 @@ mkTheoryLoadOptions as = TheoryLoadOptions
     autoSources   = return $ argExists "auto-sources" as
 
     outputModule
-    -- when proving, we act like we chose the Msr Output module.
-     | Nothing  <- findArg "outModule" as , [] /= findArg "prove" as = return $ Just ModuleMsr
-    -- default
-     | Nothing  <- findArg "outModule" as = return $ Just ModuleSpthy
+    -- MSR is default module, i.e., we translate by default ... otherwise we get warnings for actions used in lemmas that appear only in processes.
+     | Nothing  <- findArg "outModule" as = return $ Just ModuleMsr
      -- Otherwise, find output module  that matches string argument
      | Just str <- findArg "outModule" as
      , Just modCon <- find (\x -> show x  == str) (enumFrom minBound) = return $ Just modCon
@@ -337,7 +339,6 @@ loadTheory thyOpts input inFile = do
 
     isDiffMode   = L.get oDiffMode thyOpts
     isMSRModule  = L.get oOutputModule thyOpts == Just ModuleMsr
-
 
     unwrapError (Left (Left e)) = Left e
     unwrapError (Left (Right v)) = Right $ Left v
