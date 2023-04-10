@@ -27,7 +27,6 @@ module Theory.Constraint.System (
   , defaultHeuristic
 
   , Oracle(..)
-  , defaultOracle
   , defaultOracleName
   , defaultOracleNames
   , oraclePath
@@ -277,6 +276,8 @@ import           Theory.Tools.EquationStore
 
 import           System.FilePath
 import           Text.Show.Functions()
+import GHC.IO (unsafePerformIO)
+import System.Directory (doesFileExist)
 
 ----------------------------------------------------------------------
 -- ClassifiedRules
@@ -517,18 +518,21 @@ defaultTactic :: Tactic ProofContext
 defaultTactic = Tactic "default" (SmartRanking False) [] []
 
 
--- Default empty oracle.
+-- Oracle for warning/message printing. 
 defaultOracle :: Oracle
 defaultOracle = Oracle "." ""
 
--- Set the oraclename to ./theory_filename.oracle
+-- | Set the oraclename to ./theory_filename.oracle, 
+-- but backup to ./.oracle if it does not exist.
 defaultOracleName :: FilePath -> GoalRanking ProofContext -> GoalRanking ProofContext
 defaultOracleName inFile heur = case heur of
           OracleSmartRanking (Oracle workDir "") -> OracleSmartRanking $ Oracle workDir inFileOracle
           OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle workDir inFileOracle
           h -> h
           where
-            inFileOracle = last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
+            inFileOracle = if unsafePerformIO $ doesFileExist inFile
+              then last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
+              else ".oracle"
 
 -- Set the oraclename to the default for all oracles in a heuristic.
 defaultOracleNames :: Maybe (Heuristic ProofContext) -> FilePath -> Maybe (Heuristic ProofContext)

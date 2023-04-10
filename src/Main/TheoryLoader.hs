@@ -134,7 +134,7 @@ theoryLoadFlags =
       "Try to auto-generate sources lemmas"
 
   , flagOpt "" ["oraclename"] (updateArg "oraclename") "FILE"
-      ("Path to the oracle heuristic (default '" ++ "theory_filename.oracle" ++ "')")
+      "Path to the oracle heuristic (default: 'theory_filename.oracle', backup: '.oracle')"
 
   , flagNone ["quiet"] (addEmptyArg "quiet")
       "Do not display computation steps of oracle or tactic."
