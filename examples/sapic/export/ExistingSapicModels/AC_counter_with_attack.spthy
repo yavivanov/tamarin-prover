@@ -4,13 +4,13 @@ theory AC_counter
 
 begin
 
-builtins: locations-report
+builtins: dest-pairing, locations-report
 
 functions: prog/3,null/0,succ/1,list/2
 
 heuristic:S
 
-options: enableStateOpt
+options: translation-state-optimisation
 
 predicates:
 Report(x,y) <=> not  (y= 'l')
