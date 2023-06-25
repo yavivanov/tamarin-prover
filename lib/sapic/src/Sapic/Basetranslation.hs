@@ -409,7 +409,7 @@ resLocking hasUnlock v =  do
     rest <- if hasUnlock then
               toEx resLockingPOS
             else
-              toEx resLockingLNoUnlockPOS
+              toEx resLockingPOSNoUnlock
     return $ mapName hardcode $ mapFormula (mapAtoms subst) rest
     where
         subst _ a
