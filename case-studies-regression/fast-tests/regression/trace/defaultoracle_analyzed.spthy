@@ -2,8 +2,10 @@ theory DefaultOracle begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1[destructor], pair/2, snd/1[destructor]
+functions: fst/1, pair/2, snd/1
 equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+
 
 heuristic: o ""
 
@@ -30,12 +32,26 @@ guarded formula characterizing all satisfying traces:
 simplify
 SOLVED // trace found
 
+
+
+
+
+
+
 /* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.7.1
+Maude version 3.2.2
+Git revision: 9522e90e1d3d7b4f97c045ed6330e2e9b01d5692 (with uncommited changes), branch: pr-feature-config-spthy
+Compiled at: 2023-06-25 09:03:53.527295018 UTC
+*/
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 3.2.1. OK.
+ checking version: 3.2.2. OK.
  checking installation: OK.
 
 ==============================================================================
@@ -43,8 +59,9 @@ summary of summaries:
 
 analyzed: defaultoracle.spthy
 
-  processing time: 0.027392253s
-
+  output:          defaultoracle.spthy.tmp
+  processing time: 0.05s
+  
   Test1 (exists-trace): verified (2 steps)
   Test2 (exists-trace): verified (2 steps)
 

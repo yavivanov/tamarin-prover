@@ -267,6 +267,8 @@ import           Control.Monad.Reader
 import           Data.Label                           ((:->), mkLabels)
 import qualified Extension.Data.Label                 as L
 
+import           GHC.IO (unsafePerformIO)
+
 import           Logic.Connectives
 import           Theory.Constraint.Solver.AnnotatedGoals
 import           Theory.Constraint.System.Constraints
@@ -275,6 +277,7 @@ import           Theory.Model
 import           Theory.Text.Pretty
 import           Theory.Tools.EquationStore
 
+import           System.Directory                (doesDirectoryExist, doesFileExist, getTemporaryDirectory)
 import           System.FilePath
 import           Text.Show.Functions()
 
@@ -442,7 +445,7 @@ instance NFData (Prio a) where
 
 instance Binary (Prio a) where
     put p = put $ show p
-    get = return (Prio Nothing "" [] []) 
+    get = return (Prio Nothing "" [] [])
 
 -- | Derio keeps a list of function that aim at recognizing some goals based on the state of the 
 -- | System, the ProofContext and the Annotated Goal considered. If one of the function returns 
@@ -528,7 +531,12 @@ defaultOracleName inFile heur = case heur of
           OracleRanking      (Oracle workDir "") -> OracleRanking $ Oracle workDir inFileOracle
           h -> h
           where
-            inFileOracle = last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
+            inFileOracle = 
+              if unsafePerformIO $ doesFileExist inFileOracleName 
+                then inFileOracleName 
+                else ".oracle"
+            inFileOracleName = 
+              last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
 
 -- Set the oraclename to the default for all oracles in a heuristic.
 defaultOracleNames :: Maybe (Heuristic ProofContext) -> FilePath -> Maybe (Heuristic ProofContext)
@@ -636,7 +644,7 @@ stringToGoalRankingDiff :: Bool -> String -> GoalRanking ProofContext
 stringToGoalRankingDiff noOracle s = fromMaybe
     (error $ render $ sep $ map text $ lines $ "Unknown goal ranking '" ++ s
         ++ "'. Use one of the following:\n" ++ listGoalRankingsDiff noOracle)
-    $ stringToGoalRankingDiffMay noOracle s  
+    $ stringToGoalRankingDiffMay noOracle s
 
 listGoalRankings :: Bool -> String
 listGoalRankings noOracle = M.foldMapWithKey
@@ -1063,7 +1071,7 @@ safePartialAtomValuation ctxt sys =
                 case L.get sLastAtom sys of
                   Just j | nonUnifiableNodes i j -> Just False
                   _                              -> Nothing
-          
+
           Syntactic _                            -> Nothing
 
 -- | @impliedFormulas se imp@ returns the list of guarded formulas that are

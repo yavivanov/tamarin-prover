@@ -29,7 +29,6 @@ import           Data.Monoid                         (Sum(..))
 import           Theory.Text.Pretty
 import OpenTheory
 import Pretty
-import Theory.Constraint.System (defaultOracleName, defaultOracleNames)
 
 ------------------------------------------------------------------------------
 -- Closed theory querying / construction / modification
