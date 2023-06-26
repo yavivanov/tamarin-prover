@@ -493,13 +493,13 @@ diffTheory inFile = do
     liftedAddRestriction' thy rstr = if isLeftRestriction rstr
                                        then case addRestrictionDiff LHS (toRestriction rstr) thy of
                                                Just thy' -> return thy'
-                                               Nothing   -> fail $ "duplicate restriction: " ++ (get rstrName (toRestriction rstr))
+                                               Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
                                        else if isRightRestriction rstr
                                                then case addRestrictionDiff RHS (toRestriction rstr) thy of
                                                   Just thy' -> return thy'
-                                                  Nothing   -> fail $ "duplicate restriction: " ++ (get rstrName (toRestriction rstr))
+                                                  Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
                                                else case addRestrictionDiff RHS (toRestriction rstr) thy of
                                                   Just thy' -> case addRestrictionDiff LHS (toRestriction rstr) thy' of
                                                      Just thy'' -> return thy''
-                                                     Nothing   -> fail $ "duplicate restriction: " ++ (get rstrName (toRestriction rstr))
-                                                  Nothing   -> fail $ "duplicate restriction: " ++ (get rstrName (toRestriction rstr))
+                                                     Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
+                                                  Nothing   -> fail $ "duplicate restriction: " ++ get rstrName (toRestriction rstr)
