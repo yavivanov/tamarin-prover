@@ -7,14 +7,14 @@ equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
 
 
 
-heuristic: o ""
+heuristic: o "" s o "" p o ""
 
 rule (modulo E) Rule:
    [ ] --[ A( ) ]-> [ ]
 
   /* has exactly the trivial AC variant */
 
-lemma Test1 [heuristic=o ""]:
+lemma Test1 [heuristic=s o "" i o "" o ""]:
   exists-trace "∃ #i. A( ) @ #i"
 /*
 guarded formula characterizing all satisfying traces:
@@ -44,8 +44,8 @@ SOLVED // trace found
 Generated from:
 Tamarin version 1.7.1
 Maude version 3.2.2
-Git revision: 9522e90e1d3d7b4f97c045ed6330e2e9b01d5692 (with uncommited changes), branch: pr-feature-config-spthy
-Compiled at: 2023-06-25 09:03:53.527295018 UTC
+Git revision: e1cfa797f162c40da99247c62e266a32b9b9755a, branch: pr-feature-config-spthy
+Compiled at: 2023-06-27 05:07:00.734790568 UTC
 */
 
 end
@@ -60,7 +60,7 @@ summary of summaries:
 analyzed: defaultoracle.spthy
 
   output:          defaultoracle.spthy.tmp
-  processing time: 0.05s
+  processing time: 0.22s
   
   Test1 (exists-trace): verified (2 steps)
   Test2 (exists-trace): verified (2 steps)

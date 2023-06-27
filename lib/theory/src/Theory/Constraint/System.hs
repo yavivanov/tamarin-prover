@@ -538,7 +538,7 @@ defaultOracleName inFile heur = case heur of
             inFileOracleName = 
               last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
 
--- Set the oraclename to the default for all oracles in a heuristic.
+-- Set the oraclename to the default ./theory_filename.spthy for all oracles in a heuristic.
 defaultOracleNames :: Maybe (Heuristic ProofContext) -> FilePath -> Maybe (Heuristic ProofContext)
 defaultOracleNames (Just (Heuristic grl)) srcThyInFileName = Just $ Heuristic $ map (defaultOracleName srcThyInFileName) grl
 defaultOracleNames Nothing _ = Nothing

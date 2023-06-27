@@ -442,23 +442,19 @@ closeTheory version loadedThyOptions sig srcThy = do
     withTheory     f t = bitraverse f return t
     withDiffTheory f t = bitraverse return f t
 
-    -- | Update command line arguments with arguments taken from the configuration block.
-    -- | Set the default oraclename if needed.
-    thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
-
-    configStopOnTrace = 
-      if isNothing loadedStopOnTrace
-        then L.set oStopOnTrace (either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs)
-        else id
-
-    configAutoSources = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || loadedAutoSources)
-    thyHeurDefOracle  = L.set oHeuristic (defaultOracleNames loadedHeuristic srcThyInFileName)
-    
     loadedAutoSources = L.get oAutoSources loadedThyOptions
     loadedStopOnTrace = L.get oStopOnTrace loadedThyOptions
     loadedHeuristic   = L.get oHeuristic loadedThyOptions
- 
+
+    -- Update command line arguments with arguments taken from the configuration block.
+    thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
+
+    -- Set the oraclename to theory_filename.oracle (if none was supplied).
+    thyHeurDefOracle  = L.set oHeuristic (defaultOracleNames loadedHeuristic srcThyInFileName)
+
     srcThyInFileName = either (L.get thyInFile) (L.get diffThyInFile) srcThy
+
+    -- Read and process the arguments from the theory's config block.
     srcThyConfigBlockArgs = argsConfigString $ either theoryConfigBlock diffTheoryConfigBlock srcThy
 
     argsConfigString =
@@ -467,6 +463,13 @@ closeTheory version loadedThyOptions sig srcThy = do
     theoryConfFlags =
       [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
+
+    configStopOnTrace = 
+      if isNothing loadedStopOnTrace
+        then L.set oStopOnTrace (either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs)
+        else id
+
+    configAutoSources = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || loadedAutoSources)
 
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
 (&&&) f g x = f x && g x

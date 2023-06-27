@@ -118,7 +118,7 @@ closeDiffTheoryWithMaude sig thy0 autoSources =
     unfoldClosedRules       (EitherLemmaItem i:is) = EitherLemmaItem i:unfoldClosedRules is
     unfoldClosedRules (EitherRestrictionItem i:is) = EitherRestrictionItem i:unfoldClosedRules is
     unfoldClosedRules          (DiffTextItem i:is) = DiffTextItem i:unfoldClosedRules is
-    unfoldClosedRules (DiffConfigBlockItem i:is) = DiffConfigBlockItem i:unfoldClosedRules is
+    unfoldClosedRules (DiffConfigBlockItem i:is)   = DiffConfigBlockItem i:unfoldClosedRules is
     unfoldClosedRules                           [] = []
 
     -- Name of the auto-generated lemma
