@@ -30,7 +30,7 @@ import Data.Bifunctor ( Bifunctor(second) )
 import GHC.Stack (HasCallStack)
 import qualified Data.List as List
 import Data.Typeable (Typeable)
-
+import Debug.Trace (trace)
 
 -- | Smaller-or-equal / More-or-equally-specific relation on types.
 smallerType :: Eq a => Maybe a -> Maybe a -> Bool
@@ -76,10 +76,11 @@ typeWith t tt
             if lvarSort lvar' == LSortPub then
                 return Nothing
             else do
-                maybeType <- Map.lookup lvar' <$> gets vars
+                varss <- gets vars
+                maybeType <- trace (show varss) $ Map.lookup lvar' <$> gets vars
                 case maybeType of
-                    Nothing -> throwM $ WFUnbound (S.singleton lvar')
-                    Just t' -> return t'
+                    Nothing -> trace ("vars: " ++ show varss ++ "\n" ++ "lvar': "++ show lvar' ++ "\n" ++ "t: " ++ show t ++ "\n" ++ "tt: " ++ show tt ++ "\n") $ throwM $ WFUnbound (S.singleton lvar')
+                    Just t' -> trace ("vars: " ++ show varss ++ "\n" ++ "lvar': "++ show lvar' ++ "\n" ++ "t: " ++ show t ++ "\n" ++ "tt: " ++ show tt ++ "\n") $ return t'
         t' <- catch (sqcap stype' tt) (sqHandler t)
         te <- get
         modify' (\s -> s { vars = Map.insert (slvar v) t' (vars te)})
@@ -139,7 +140,7 @@ typeTermsWithEnv typeEnv terms = execStateT (mapM typeWith' terms) typeEnv'
 typeProcess :: (GoodAnnotation a, MonadThrow m, MonadCatch m, Show a, Typeable a) =>
     Process a SapicLVar ->  StateT
         TypingEnvironment m (Process a SapicLVar)
-typeProcess = traverseProcess fNull fAct fComb gAct gComb
+typeProcess p = traverseProcess fNull fAct fComb gAct gComb p
      where
         -- fNull/fAcc/fComb collect variables that are bound when going downwards
         fNull ann  = return (ProcessNull ann)
@@ -156,8 +157,10 @@ typeProcess = traverseProcess fNull fAct fComb gAct gComb
             ac' <- traverseTermsAction (typeWith' $ ProcessAction ac ann r) typeWithFact typeWithVar ac
             return (ProcessAction ac' ann r)
         gComb c ann rl rr = do
-            c' <- traverseTermsComb (typeWith' $ ProcessComb c ann rl rr) typeWithFact typeWithVar c
-            return $ ProcessComb c' ann rl rr
+            c' <- 
+              trace ( "p: " ++ show p ++ "\n" ++ "c: " ++ show c ++ "\n" ++ "ann: " ++ show ann ++ "\n" ++ "rl: " ++ show rl ++ "\n" ++ "rr: " ++ show rr ++ "\n") $ 
+                traverseTermsComb (typeWith' $ ProcessComb c ann rl rr) typeWithFact typeWithVar c
+            trace ("c': " ++ show c' ++ "\n") $ return $ ProcessComb c' ann rl rr
         typeWith' p' t = catch (fst <$> typeWith t Nothing) (handleEx p')
         typeWithVar  v -- variables are correctly typed, as we just inserted them
             | Nothing <- stype v = return $ SapicLVar (slvar v) defaultSapicType
@@ -214,7 +217,7 @@ typeTheoryEnv th = do
         typeAndRenameProcess p = do
                 pUnique <- renameUnique p
                 modify' (\s -> s { vars = Map.empty})
-                typeProcess pUnique
+                trace ("typeTheoryEnv: " ++ "p: "++ show p ++ "\n" ++ "pUnique: " ++ show pUnique ++ "\n") $ typeProcess pUnique
         typeAndRenameProcessDef p = do
                 let pr = L.get pBody p
                 let pvars = fromMaybe (S.toList (varsProc pr) List.\\ accBindings pr) (L.get pVars p)
@@ -238,28 +241,40 @@ renameUnique :: (Monad m, Apply (Subst Name LVar) ann, GoodAnnotation ann, HasCa
 renameUnique p = Precise.evalFreshT actualCall initState
     where
         actualCall = renameUnique' emptySubst p
-        initState = avoidPreciseVars . map (\(SapicLVar lvar _) -> lvar) $ S.toList $ varsProc p
+        initState = trace (show "renameUnique: " ++ "varsProc: " ++ show (varsProc p) ++ "\n") $ avoidPreciseVars . map (\(SapicLVar lvar _) -> lvar) $ S.toList $ varsProc p
 
 renameUnique' ::
   (MonadFresh m, Apply (Subst Name LVar) ann, GoodAnnotation ann) =>
   Subst Name LVar -> Process ann SapicLVar -> m (Process ann SapicLVar)
 renameUnique' initSubst p = do
-        let p' = apply initSubst p -- apply outstanding substitution subst, ignore capturing and hope for the best
+        let p' = trace ("renameUnique': " 
+                       ++ "\n" ++ "initSubst: " ++ show initSubst ++ "\n"
+                       ++ "\n" ++ "showP: " ++ showP p ++ "\n"
+                       ++ "\n" ++ "showP': " ++ showP (apply initSubst p) ++ "\n"
+                       )  
+               $ apply initSubst p -- apply outstanding substitution subst, ignore capturing and hope for the best
         case p' of
-            ProcessNull _ -> return p'
+            ProcessNull _ -> trace (show "procnull in renameUnique'") $ return p'
             ProcessAction ac ann pl -> do
-                (subst,inv) <- mkSubst $ bindingsAct ann ac
+                (subst,inv) <- trace ("renameUnique': " ++ "\n" ++ "bActs: " ++ (show $ bindingsAct ann ac)) $ mkSubst $ bindingsAct ann ac
                 let ann' = mappendProcessParsedAnnotation (mempty {backSubstitution = inv}) ann
                 let ac' = apply subst ac -- use apply instead of applyM because we want to ignore capturing, i.e., rename bound names...
                 pl' <- renameUnique' subst pl
-                return $ ProcessAction ac' ann' pl'
+                trace ("renameUnique': " ++ "\n" ++ "subst: " ++ show subst ++ "\n"
+                  ++ "inv: " ++ show inv ++ "\n"
+                  -- ++ "ann: " ++ show ann ++ "\n"
+                  ++ "ac: " ++ show ac ++ show ac' ++ "\n") 
+                  $ return $ ProcessAction ac' ann' pl'
             ProcessComb comb ann pl pr -> do
-                (subst,inv) <- mkSubst $ bindingsComb ann comb
+                (subst,inv) <- trace ("renameUnique': " ++ "\n" ++ "bComb: " ++ (show $ bindingsComb ann comb)) $ mkSubst $ bindingsComb ann comb
                 let ann' = mappendProcessParsedAnnotation (mempty {backSubstitution = inv}) ann
                 let comb' = apply subst comb
                 pl' <- renameUnique' subst pl
                 pr' <- renameUnique' subst pr
-                return $ ProcessComb comb' ann' pl' pr'
+                trace ("renameUnique': " ++ "\n" ++ "subst: " ++ show subst ++ "\n"
+                  ++ "inv: " ++ show inv ++ "\n"
+                  ++ "comb: " ++ show comb ++ show comb' ++ "\n") 
+                  $ return $ ProcessComb comb' ann' pl' pr'
     where
         substFromVarList = substFromList . map (second varTerm)
         -- f v = do v' <- freshSapicLVarCopy v; return (v, v')
@@ -271,3 +286,8 @@ renameUnique' initSubst p = do
         mkSubst bvars = do -- create substitution renaming all elements of bind' into a fresh variable
                 vmap <- mapM f bvars
                 return (substFromVarList vmap, substFromVarList $ map swap vmap)
+        showP :: Process ann SapicLVar -> String
+        showP (ProcessComb comb ann pl pr) = show comb
+        showP (ProcessNull _) = ""
+        showP (ProcessAction ac ann pl) = show ac
+
