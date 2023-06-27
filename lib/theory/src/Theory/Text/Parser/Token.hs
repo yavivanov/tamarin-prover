@@ -126,7 +126,7 @@ import qualified Data.Set                   as S
 -- import           GHC.Generics                        (Generic)
 
 import           Control.Applicative hiding (empty, many, optional)
-import           Control.Category
+import Control.Category ( Category((.)) )
 import           Control.Monad
 
 import           System.FilePath
@@ -191,6 +191,44 @@ spthy =
       , T.nestedComments = True
       , T.identStart     = alphaNum
       , T.identLetter    = alphaNum <|> oneOf "_"
+      , T.reservedNames  = ["in","let","rule","diff"]
+      , T.opStart        = oneOf ":!$%&*+./<=>?@\\^|-#"
+      , T.opLetter       = oneOf ":!$%&*+./<=>?@\\^|-#"
+      , T.reservedOpNames= []
+      , T.caseSensitive  = True
+      }
+
+-- Use Parsec's support for defining token parsers.
+-- Relaxed identifier used for public and public fresh names.
+relaxedIdentSQ :: T.TokenParser ParserState
+relaxedIdentSQ =
+    T.makeTokenParser spthyStyle
+  where
+    spthyStyle = T.LanguageDef
+      { T.commentStart   = "/*"
+      , T.commentEnd     = "*/"
+      , T.commentLine    = "//"
+      , T.nestedComments = True
+      , T.identStart     = noneOf "\""
+      , T.identLetter    = noneOf "\""
+      , T.reservedNames  = ["in","let","rule","diff"]
+      , T.opStart        = oneOf ":!$%&*+./<=>?@\\^|-#"
+      , T.opLetter       = oneOf ":!$%&*+./<=>?@\\^|-#"
+      , T.reservedOpNames= []
+      , T.caseSensitive  = True
+      }
+
+relaxedIdentDQ :: T.TokenParser ParserState
+relaxedIdentDQ =
+    T.makeTokenParser spthyStyle
+  where
+    spthyStyle = T.LanguageDef
+      { T.commentStart   = "/*"
+      , T.commentEnd     = "*/"
+      , T.commentLine    = "//"
+      , T.nestedComments = True
+      , T.identStart     = noneOf "'"
+      , T.identLetter    = noneOf "'"
       , T.reservedNames  = ["in","let","rule","diff"]
       , T.opStart        = oneOf ":!$%&*+./<=>?@\\^|-#"
       , T.opLetter       = oneOf ":!$%&*+./<=>?@\\^|-#"
@@ -331,6 +369,14 @@ formalComment = T.lexeme spthy $ do
 identifier :: Parser String
 identifier = T.identifier spthy
 
+-- | Parse an identifier as a string
+identifierSQ :: Parser String
+identifierSQ = T.identifier relaxedIdentSQ
+
+-- | Parse an identifier as a string
+identifierDQ :: Parser String
+identifierDQ = T.identifier relaxedIdentDQ
+
 -- | Parse an identifier possibly indexed with a number.
 indexedIdentifier :: Parser (String, Integer)
 indexedIdentifier = do
@@ -379,11 +425,11 @@ nodevar = asum
 
 -- | Parse a literal fresh name, e.g., @~'n'@.
 freshName :: Parser String
-freshName = try (symbol "~" *> singleQuoted identifier)
+freshName = try (symbol "~" *> (singleQuoted identifierDQ <|> doubleQuoted identifierSQ))
 
 -- | Parse a literal public name, e.g., @'n'@.
 pubName :: Parser String
-pubName = singleQuoted identifier
+pubName = singleQuoted identifierDQ <|> doubleQuoted identifierSQ
 
 -- | Parse a Sapic Type
 typep :: Parser SapicType
