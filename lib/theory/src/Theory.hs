@@ -265,6 +265,7 @@ module Theory (
   , module Theory.Proof
   , module Pretty
 
+
   ) where
 
 -- import           Debug.Trace
