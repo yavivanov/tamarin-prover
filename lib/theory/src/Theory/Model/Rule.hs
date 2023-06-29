@@ -1127,7 +1127,7 @@ prettyProtoRuleName rn = text $ case rn of
     FreshRule   -> "Fresh"
     StandRule n -> case n of
       NonSAPiCRuleName s -> prefixIfReserved s
-      SAPiCRuleName s -> formatSAPiCRuleName s
+      SAPiCRuleName s -> (prefixIfReserved . formatSAPiCRuleName) s
 
 prettyDotProtoRuleName :: Document d => ProtoRuleName -> d
 prettyDotProtoRuleName rn = text $ case rn of

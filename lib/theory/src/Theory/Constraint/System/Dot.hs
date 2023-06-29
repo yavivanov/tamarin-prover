@@ -134,10 +134,11 @@ dotNode v = dotOnce dsNodes v $ do
     label ru = " : " ++ render nameAndActs
       where
         nameAndActs = case filter isNotDiffAnnotation $ get rActs ru of
-            [] -> ruleInfo (prettyDotProtoRuleName . get praciName) prettyIntrRuleACInfo (get rInfo ru);
-            xs -> ruleInfo (prettyDotProtoRuleName . get praciName) prettyIntrRuleACInfo (get rInfo ru) <->
-                brackets (vcat $ punctuate comma $ map prettyLNFact xs);
-        isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))        
+          [] -> prettyPrintRuleName
+          xs -> prettyPrintRuleName <-> brackets (vcat $ punctuate comma $ map prettyLNFact xs)
+        isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))
+        prettyPrintRuleName =
+          ruleInfo (prettyDotProtoRuleName . get praciName) prettyIntrRuleACInfo (get rInfo ru)
 
 -- | An edge from a rule node to its premises or conclusions.
 dotIntraRuleEdge :: D.NodeId -> D.NodeId -> SeDot ()
@@ -348,7 +349,7 @@ dotNodeCompact boringStyle v = dotOnce dsNodes v $ do
     mkSimpleNode lbl attrs =
         liftDot $ D.node $ [("label", lbl),("shape","ellipse")] ++ attrs
 
-    mkNode  :: RuleACInst -> [(String, String)] -> Bool 
+    mkNode  :: RuleACInst -> [(String, String)] -> Bool
       -> ReaderT (System, NodeColorMap) (StateT DotState D.Dot)
          [(Maybe (Either PremIdx ConcIdx), D.NodeId)]
     mkNode ru attrs hasOutgoingEdge
@@ -370,11 +371,10 @@ dotNodeCompact boringStyle v = dotOnce dsNodes v $ do
         cs = renderRow [ (Just (Right i), prettyLNFact c) | (i, c) <- enumConcs ru ]
 
         ruleLabel = case filter isNotDiffAnnotation $ get rActs ru of
-            [] -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru);
-            xs -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru) <>
-                (brackets $ vcat $ punctuate comma $
-                map prettyLNFact $ xs)
+            [] -> prettyPrintNodeIDRuleName
+            xs -> prettyPrintNodeIDRuleName <> brackets (vcat $ punctuate comma $ map prettyLNFact $ xs)
         isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))
+        prettyPrintNodeIDRuleName = prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru);
 
         renderRow annDocs =
           zipWith (\(ann, _) lbl -> (ann, lbl)) annDocs $
