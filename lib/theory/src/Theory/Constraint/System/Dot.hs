@@ -137,8 +137,7 @@ dotNode v = dotOnce dsNodes v $ do
             [] -> ruleInfo (prettyDotProtoRuleName . get praciName) prettyIntrRuleACInfo (get rInfo ru);
             xs -> ruleInfo (prettyDotProtoRuleName . get praciName) prettyIntrRuleACInfo (get rInfo ru) <->
                 brackets (vcat $ punctuate comma $ map prettyLNFact xs);
-        isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))
-            
+        isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))        
 
 -- | An edge from a rule node to its premises or conclusions.
 dotIntraRuleEdge :: D.NodeId -> D.NodeId -> SeDot ()
@@ -371,8 +370,8 @@ dotNodeCompact boringStyle v = dotOnce dsNodes v $ do
         cs = renderRow [ (Just (Right i), prettyLNFact c) | (i, c) <- enumConcs ru ]
 
         ruleLabel = case filter isNotDiffAnnotation $ get rActs ru of
-            [] -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru ++ "comes through here1" );
-            xs -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru ++ "comes through here2" ) <>
+            [] -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru);
+            xs -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru) <>
                 (brackets $ vcat $ punctuate comma $
                 map prettyLNFact $ xs)
         isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))
