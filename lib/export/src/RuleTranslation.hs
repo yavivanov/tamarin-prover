@@ -163,7 +163,7 @@ showRuleName :: ProtoRuleName -> String
 showRuleName FreshRule = "rFresh"
 showRuleName (StandRule rn) = 
   case rn of 
-    DefdRuleName s -> 'r' : s
+    NonSAPiCRuleName s -> 'r' : s
     SAPiCRuleName s -> 'r' : s
 
 translateRule :: (HighlightDocument d) => [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)

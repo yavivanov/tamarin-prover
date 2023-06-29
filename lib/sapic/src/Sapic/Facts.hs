@@ -369,7 +369,7 @@ toRule AnnotatedRule{..} = -- this is a Record Wildcard
           Rule (ProtoRuleEInfo (StandRule name) attr restr) l r a (newVariables l r)
           where
             name = case processName of
-              Just s -> DefdRuleName s
+              Just s -> NonSAPiCRuleName s
               Nothing -> SAPiCRuleName $ unNull (stripSemicolon (prettySapicTopLevel process))
                          ++ "#_" ++ show index ++ "_"
                          ++ prettyEitherPositionOrSpecial position

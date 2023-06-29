@@ -371,8 +371,8 @@ dotNodeCompact boringStyle v = dotOnce dsNodes v $ do
         cs = renderRow [ (Just (Right i), prettyLNFact c) | (i, c) <- enumConcs ru ]
 
         ruleLabel = case filter isNotDiffAnnotation $ get rActs ru of
-            [] -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru);
-            xs -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru) <>
+            [] -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru ++ "comes through here1" );
+            xs -> prettyNodeId v <-> colon <-> text (showPrettyRuleCaseName ru ++ "comes through here2" ) <>
                 (brackets $ vcat $ punctuate comma $
                 map prettyLNFact $ xs)
         isNotDiffAnnotation fa = (fa /= (Fact (ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0) S.empty []))

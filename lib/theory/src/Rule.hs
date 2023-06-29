@@ -82,7 +82,7 @@ unfoldRuleVariants (ClosedProtoRule ruE ruAC@(Rule ruACInfoOld ps cs as nvs))
           rName i oldName = case oldName of
             FreshRule -> FreshRule
             StandRule n -> case n of
-              DefdRuleName s -> StandRule $ DefdRuleName $ s ++ "___VARIANT_" ++ show i
+              NonSAPiCRuleName s -> StandRule $ NonSAPiCRuleName $ s ++ "___VARIANT_" ++ show i
               SAPiCRuleName s -> StandRule $ SAPiCRuleName $ s ++ "___VARIANT_" ++ show i
 
           toClosedProtoRule (i, (ps', cs', as', nvs'))

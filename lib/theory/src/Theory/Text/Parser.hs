@@ -152,7 +152,7 @@ liftedAddCaseTest thy cTest =
 --        (but they should not, as they will not be exported)
 liftedAddProtoRule :: Catch.MonadThrow m => OpenTheory -> OpenProtoRule -> m OpenTheory
 liftedAddProtoRule thy ru
-    | (StandRule (DefdRuleName rname))  <- get (preName . rInfo . oprRuleE) ru = addRule thy ru rname
+    | (StandRule (NonSAPiCRuleName rname))  <- get (preName . rInfo . oprRuleE) ru = addRule thy ru rname
     | (StandRule (SAPiCRuleName rname)) <- get (preName . rInfo . oprRuleE) ru = addRule thy ru rname
     | otherwise = Catch.throwM TryingToAddFreshRule
             where
