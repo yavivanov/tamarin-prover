@@ -18,27 +18,26 @@ module Theory.Text.Parser.Sapic(
 )
 where
 
+import           Prelude                    hiding (id, (.))
 import qualified Data.ByteString.Char8      as BC
 import           Data.Label
-import           Prelude                    hiding (id, (.))
 -- import           Data.Monoid                hiding (Last)
-import           Control.Applicative        hiding (empty, many, optional)
 import qualified Data.Set                   as S
+import           Control.Applicative        hiding (empty, many, optional)
 -- import qualified Control.Monad.Catch        as Catch
 import           Text.Parsec                hiding ((<|>))
 import           Theory
 import           Theory.Sapic
 import           Theory.Text.Parser.Token
 
-import qualified Data.Functor.Identity      ()
-import           Data.Maybe                 (fromMaybe)
-import           Debug.Trace                (trace)
-import           Theory.Sapic.Pattern
-import           Theory.Text.Parser.Fact
-import           Theory.Text.Parser.Formula
-import           Theory.Text.Parser.Let
-import           Theory.Text.Parser.Rule
 import           Theory.Text.Parser.Term
+import           Theory.Text.Parser.Fact
+import           Theory.Text.Parser.Rule
+import Theory.Text.Parser.Let
+import Theory.Text.Parser.Formula
+import Theory.Sapic.Pattern
+import qualified Data.Functor.Identity ()
+import Data.Maybe (fromMaybe)
 
 
 -- used for debugging
@@ -70,7 +69,7 @@ processDef thy= do
                 vs <- optionMaybe $ parens $ commaSep sapicvar
                 equalSign
                 p <- process thy
-                trace ("\n processDef: " ++  show (ProcessDef (BC.unpack i) p vs)) $ return (ProcessDef (BC.unpack i) p vs)
+                return (ProcessDef (BC.unpack i) p vs)
 
 toplevelprocess :: OpenTheory -> Parser PlainProcess
 toplevelprocess thy = do
@@ -268,7 +267,7 @@ actionprocess thy=
                         q   <- elseprocess thy
                         let f (t1,t2) p' =
                                     ProcessComb (Let (unpattern t1) t2 (extractMatchingVariables t1)) mempty p' q
-                        trace ("q:" ++ show q ++ "\n" ++ "p: " ++ show p ++ "\n" ++ "ls: " ++ show ls ++ "\n" ++ "foldl f p ls: " ++ show (foldr f p ls) ++ "\n") $ return $ foldr f p ls
+                        return $ foldr f p ls
                         <?> "let binding"
                 )
             <|> (do   -- null process: terminating element
@@ -314,5 +313,5 @@ actionprocess thy=
 -- | checks if process exists, if not -> error
 checkProcess :: String -> OpenTheory -> Parser (PlainProcess, [SapicLVar])
 checkProcess i thy = case lookupProcessDef i thy of
-    Just p  -> return (get pBody p, fromMaybe [] $ get pVars p)
+    Just p -> return (get pBody p, fromMaybe [] $ get pVars p)
     Nothing -> fail $ "process not defined: " ++ i

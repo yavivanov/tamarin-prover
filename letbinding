@@ -1,9 +1,0 @@
-theory LetBinding 
-begin  
-
-process: 
-  in(a);
-  let x = <a, a> in
-    out(x)
-  
-end

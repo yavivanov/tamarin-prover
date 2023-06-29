@@ -13,4 +13,4 @@ ghc-options:
 nix:
   packages: [ zlib ]
 
-system-ghc: true
+
