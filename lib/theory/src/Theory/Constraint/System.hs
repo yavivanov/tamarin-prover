@@ -534,7 +534,7 @@ defaultOracleName inFile heur = case heur of
             inFileOracle = 
               if unsafePerformIO $ doesFileExist inFileOracleName 
                 then inFileOracleName 
-                else ".oracle"
+                else "oracle"
             inFileOracleName = 
               last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') inFile) ++ ".oracle"
 
