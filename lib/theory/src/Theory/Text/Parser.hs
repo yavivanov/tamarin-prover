@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE PatternGuards          #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Copyright   : (c) 2010-2012 Simon Meier, Benedikt Schmidt
@@ -212,14 +213,16 @@ theory inFile = do
     if block == "configuration"
         then do
             fileArgs <- stringLiteral <* symbol_ "begin"
-            addItems inFile (set thyInFile (fromMaybe "" inFile) $ set thyName thyId (modify thyItems (++ [ConfigBlockItem fileArgs]) defThy)) <* symbol_ "end"
+            addItems inFile (set thyName thyId (modify thyItems (++ [ConfigBlockItem fileArgs]) defThy)) <* symbol_ "end"
         else do
-            addItems inFile (set thyInFile (fromMaybe "" inFile) $ set thyName thyId defThy) <* symbol_ "end"
+            addItems inFile (set thyName thyId defThy) <* symbol_ "end"
   where
     addItems :: Maybe FilePath -> OpenTheory -> Parser OpenTheory
     addItems inFile0 thy = asum
-      [ do thy' <- liftedAddHeuristic thy =<< heuristic False workDir
-           addItems inFile0 thy'
+      [ do
+          thyHeuristic <- heuristic False workDir
+          thy' <- liftedAddHeuristic thy $ defaultOracleNames (fromMaybe "" inFile0) thyHeuristic
+          addItems inFile0 thy'
       , do thy' <- liftedAddTactic thy =<< tactic False
            addItems inFile0 thy'
       , do thy' <- builtins thy
@@ -246,9 +249,10 @@ theory inFile = do
            addItems inFile0 thy'
       , do accLem <- lemmaAcc workDir
            let tests = mapMaybe (flip lookupCaseTest $ thy) (get aCaseIdentifiers accLem)
-           thy' <- liftedAddAccLemma thy (defineCaseTests accLem tests)
+           thy' <- liftedAddAccLemma thy (rewriteAccLemmaOracle inFile0 $ defineCaseTests accLem tests)
            addItems inFile0 thy'
-      , do thy' <- liftedAddLemma thy =<< lemma workDir
+      , do lem <- lemma workDir
+           thy' <- liftedAddLemma thy (rewriteLemmaOracle inFile0 lem)
            addItems inFile0 thy'
       , do ru <- protoRule
            thy' <- liftedAddProtoRule thy ru
@@ -283,6 +287,19 @@ theory inFile = do
        flag <- try (symbol "#define") *> identifier
        modifyStateFlag (S.insert flag)
        addItems inFile0 thy
+
+    rewriteLemmaOracle inFile' lem =
+      set lAttributes (map (rwOracleLemHeurAttr inFile') lattrs) lem
+      where
+        lattrs  = get lAttributes lem
+
+    rewriteAccLemmaOracle inFile' accLemma =
+      set aAttributes (map (rwOracleLemHeurAttr inFile') acclattrs) accLemma
+      where
+        acclattrs  = get aAttributes accLemma
+
+    rwOracleLemHeurAttr inFile' (LemmaHeuristic grl) = LemmaHeuristic $ defaultOracleNames (fromMaybe "" inFile') grl
+    rwOracleLemHeurAttr _ attr = attr
 
 
     include :: Maybe FilePath -> OpenTheory -> Parser OpenTheory
@@ -360,7 +377,7 @@ diffTheory inFile = do
     if block == "configuration"
         then do
             fileArgs <- stringLiteral <* symbol_ "begin"
-            addItems inFile (set diffThyInFile (fromMaybe "" inFile) $ set diffThyName thyId (modify diffThyItems (++ [DiffConfigBlockItem fileArgs]) (defaultOpenDiffTheory ("diff" `S.member` flags0)))) <* symbol_ "end"
+            addItems inFile (set diffThyName thyId (modify diffThyItems (++ [DiffConfigBlockItem fileArgs]) (defaultOpenDiffTheory ("diff" `S.member` flags0)))) <* symbol_ "end"
         else do
             addItems inFile (set diffThyName thyId (defaultOpenDiffTheory ("diff" `S.member` flags0))) <* symbol "end"
   where
