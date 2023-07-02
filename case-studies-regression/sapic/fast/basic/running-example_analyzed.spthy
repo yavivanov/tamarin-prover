@@ -2,12 +2,13 @@ theory RunningExample begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1[destructor], pair/2, sdec/2[destructor], senc/2,
-           snd/1[destructor]
+functions: fst/1, pair/2, sdec/2, senc/2, snd/1
 equations:
     fst(<x.1, x.2>) = x.1,
     sdec(senc(x.1, x.2), x.2) = x.1,
     snd(<x.1, x.2>) = x.2
+
+
 
 heuristic: p
 
@@ -356,6 +357,12 @@ by contradiction /* from formulas */
 
 
 
+
+
+
+
+
+
 rule (modulo E) Init[color=#ffffff, process="!"]:
    [ ] --[ Init( ) ]-> [ !Semistate_1( ) ]
 
@@ -665,29 +672,39 @@ restriction single_session:
   "∀ #i #j. ((Init( ) @ #i) ∧ (Init( ) @ #j)) ⇒ (#i = #j)"
   // safety formula
 
-/* All well-formedness checks were successful. */
+/*
+WARNING: the following wellformedness checks failed!
+
+The variables of the follwing rule(s) are not derivable from their premises, you may be performing unintended pattern matching:
+  lookupatthasa_0_1121
+Failed to derive Variable(s): a.1
+  
+  lookupkeyhask_0_112111
+Failed to derive Variable(s): k.2
+  
+  lookupatthasa_0_121
+Failed to derive Variable(s): a1.1
+  
+  lookupkeyhask_0_12111
+Failed to derive Variable(s): k1.1
+  
+  lookupkeyhask_0_121111
+Failed to derive Variable(s): k2.1
+*/
+
+/*
+Generated from:
+Tamarin version 1.7.1
+Maude version 3.2.1
+Git revision: 4b299c253445d7bbc7fce41abf0b0d5659bb1d58, branch: develop
+Compiled at: 2023-06-26 11:54:20.223793825 UTC
+*/
 
 end
 /* Output
 maude tool: 'maude'
- checking version: 3.0. OK.
+ checking version: 3.2.1. OK.
  checking installation: OK.
-
-
-analyzing: examples/sapic/fast/basic/running-example.spthy
-
-------------------------------------------------------------------------------
-analyzed: examples/sapic/fast/basic/running-example.spthy
-
-  output:          examples/sapic/fast/basic/running-example.spthy.tmp
-  processing time: 4.643746574s
-  can_create_key (exists-trace): verified (3 steps)
-  can_obtain_wrapping (exists-trace): verified (11 steps)
-  dec_limits (all-traces): verified (47 steps)
-  cannot_obtain_key_ind (all-traces): verified (22 steps)
-  cannot_obtain_key (all-traces): verified (2 steps)
-
-------------------------------------------------------------------------------
 
 ==============================================================================
 summary of summaries:
@@ -695,7 +712,11 @@ summary of summaries:
 analyzed: examples/sapic/fast/basic/running-example.spthy
 
   output:          examples/sapic/fast/basic/running-example.spthy.tmp
-  processing time: 4.643746574s
+  processing time: 1.75s
+  
+  WARNING: 5 wellformedness check failed!
+           The analysis results might be wrong!
+  
   can_create_key (exists-trace): verified (3 steps)
   can_obtain_wrapping (exists-trace): verified (11 steps)
   dec_limits (all-traces): verified (47 steps)
