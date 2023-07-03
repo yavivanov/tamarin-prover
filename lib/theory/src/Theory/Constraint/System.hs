@@ -28,6 +28,7 @@ module Theory.Constraint.System (
 
   , Oracle(..)
   , defaultOracle
+  , defaultOracleNames
   , oraclePath
   , maybeSetOracleWorkDir
   , maybeSetOracleRelPath
@@ -246,8 +247,9 @@ import           GHC.Generics                         (Generic)
 
 import           Data.Binary
 import qualified Data.ByteString.Char8                as BC
+import           Data.Char                            (isSpace)
 import qualified Data.DAG.Simple                      as D
-import           Data.List                            (foldl', partition, intersect,find,intercalate)
+import           Data.List                            (foldl', partition, intersect,find,intercalate, groupBy)
 import qualified Data.Map                             as M
 import           Data.Maybe                           (fromMaybe,mapMaybe)
 -- import           Data.Monoid                          (Monoid(..))
@@ -265,6 +267,8 @@ import           Control.Monad.Reader
 import           Data.Label                           ((:->), mkLabels)
 import qualified Extension.Data.Label                 as L
 
+import           GHC.IO                               (unsafePerformIO)
+
 import           Logic.Connectives
 import           Theory.Constraint.Solver.AnnotatedGoals
 import           Theory.Constraint.System.Constraints
@@ -273,8 +277,10 @@ import           Theory.Model
 import           Theory.Text.Pretty
 import           Theory.Tools.EquationStore
 
+import           System.Directory                     (doesFileExist)
 import           System.FilePath
 import           Text.Show.Functions()
+import Debug.Trace (trace)
 
 ----------------------------------------------------------------------
 -- ClassifiedRules
@@ -440,7 +446,7 @@ instance NFData (Prio a) where
 
 instance Binary (Prio a) where
     put p = put $ show p
-    get = return (Prio Nothing "" [] []) 
+    get = return (Prio Nothing "" [] [])
 
 -- | Derio keeps a list of function that aim at recognizing some goals based on the state of the 
 -- | System, the ProofContext and the Annotated Goal considered. If one of the function returns 
@@ -518,6 +524,16 @@ defaultTactic = Tactic "default" (SmartRanking False) [] []
 -- Default to "./oracle" in the current working directory.
 defaultOracle :: Oracle
 defaultOracle = Oracle "." "oracle"
+
+-- | Set the oraclename to the default ./theory_filename.oracle for all oracles in a heuristic.
+defaultOracleNames :: FilePath -> [GoalRanking ProofContext] ->[GoalRanking ProofContext]
+defaultOracleNames srcThyInFileName = map (mapOracleRanking remapOracle)
+  where
+    remapOracle o =
+      if oraclePath o == "./oracle" && unsafePerformIO (doesFileExist inFileOracleName)
+        then Oracle "." inFileOracleName else o
+    inFileOracleName =
+      last (groupBy (\_ b -> b /= '/') $ head $ groupBy (\_ b -> b /= '.') srcThyInFileName) ++ ".oracle"
 
 maybeSetOracleWorkDir :: Maybe FilePath -> Oracle -> Oracle
 maybeSetOracleWorkDir p o = maybe o (\x -> o{ oracleWorkDir = x }) p
