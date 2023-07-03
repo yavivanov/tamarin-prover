@@ -20,6 +20,7 @@ module Main.TheoryLoader (
   , TheoryLoadOptions(..)
   , oProveMode
   , oDiffMode
+  , oHeuristic
   , oOutputModule
   , oMaudePath
   , oParseOnlyMode
@@ -86,7 +87,7 @@ import GHC.Records (HasField(getField))
 
 import           TheoryObject                        (diffThyOptions, diffTheoryConfigBlock, theoryConfigBlock)
 import           Items.OptionItem                    (openChainsLimit,saturationLimit,lemmasToProve)
-import Data.Maybe (fromMaybe, isNothing, fromJust, isJust)
+import Data.Maybe (fromMaybe, fromJust, isJust, isNothing)
 
 import qualified Data.Set
 import Theory.Text.Parser.Token
@@ -140,7 +141,7 @@ theoryLoadFlags =
       "Try to auto-generate sources lemmas"
 
   , flagOpt "" ["oraclename"] (updateArg "oraclename") "FILE"
-      ("Path to the oracle heuristic (default '" ++ "theory_filename.oracle" ++ "')")
+      ("Path to the oracle heuristic (default '" ++ "./theory_filename.oracle" ++ "', fallback '" ++ "./oracle" ++ "')")
 
   , flagNone ["quiet"] (addEmptyArg "quiet")
       "Do not display computation steps of oracle or tactic."
@@ -239,10 +240,12 @@ mkTheoryLoadOptions as = TheoryLoadOptions
 
     heuristic = case findArg "heuristic" as of
         Just rawRankings@(_:_) -> return $ Just $ roundRobinHeuristic
-                                         $ map (mapOracleRanking (maybeSetOracleRelPath (findArg "oraclename" as))) (filterHeuristic (argExists "diff" as) rawRankings)
+                                         $ map (mapOracleRanking (maybeSetOracleRelPath oraclename)) (filterHeuristic (argExists "diff" as) rawRankings)
         Just []                -> throwError $ ArgumentError "heuristic: at least one ranking must be given"
         _                      -> return Nothing
-
+    oraclename = case findArg "oraclename" as of
+      Just "" -> Nothing
+      name    -> name
     --toGoalRanking | argExists "diff" as = stringToGoalRankingDiff
     --              | otherwise           = stringToGoalRanking
 
@@ -288,6 +291,15 @@ mkTheoryLoadOptions as = TheoryLoadOptions
                    then return (fromMaybe derivDefault (readMaybe (head derivchecks) :: Maybe Int))
                    else return derivDefault
     -- FIXME : use "read" and handle potential error without crash (with default version and raising error)
+
+stopOnTrace :: MonadError ArgumentError m => Arguments -> m (Maybe SolutionExtractor)
+stopOnTrace as = case map toLower <$> findArg "stop-on-trace" as of
+  Just "dfs"    -> return $ Just CutDFS
+  Just "none"   -> return $ Just CutNothing
+  Just "bfs"    -> return $ Just CutBFS
+  Just "seqdfs" -> return $ Just CutSingleThreadDFS
+  Just unknown  -> throwError $ ArgumentError ("unknown stop-on-trace method: " ++ unknown)
+  Nothing       -> return Nothing
 
 lemmaSelectorByModule :: HasLemmaAttributes l => TheoryLoadOptions -> l -> Bool
 lemmaSelectorByModule thyOpt lem = case lemmaModules of
@@ -354,7 +366,7 @@ loadTheory thyOpts input inFile = do
 
     withTheory     f t = bitraverse f return t
 
-closeTheory :: MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
+closeTheory :: MonadIO m => MonadError TheoryLoadError m => String -> TheoryLoadOptions -> SignatureWithMaude -> Either OpenTheory OpenDiffTheory -> m ((WfErrorReport, Either ClosedTheory ClosedDiffTheory))
 closeTheory version loadedThyOptions sig srcThy = do
   let preReport = either (\t -> (Sapic.checkWellformedness t ++ Acc.checkWellformedness t))
                          (const []) srcThy
@@ -434,23 +446,21 @@ closeTheory version loadedThyOptions sig srcThy = do
     withTheory     f t = bitraverse f return t
     withDiffTheory f t = bitraverse return f t
 
-    -- | Update command line arguments with arguments taken from the configuration block.
-    -- | Set the default oraclename if needed.
-    thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
-
-    configStopOnTrace = 
-      if isNothing loadedStopOnTrace
-        then L.set oStopOnTrace (either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs)
-        else id
-
-    configAutoSources = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || loadedAutoSources)
-    thyHeurDefOracle  = L.set oHeuristic (defaultOracleNames loadedHeuristic srcThyInFileName)
-    
     loadedAutoSources = L.get oAutoSources loadedThyOptions
     loadedStopOnTrace = L.get oStopOnTrace loadedThyOptions
     loadedHeuristic   = L.get oHeuristic loadedThyOptions
- 
+
     srcThyInFileName = either (L.get thyInFile) (L.get diffThyInFile) srcThy
+
+    -- Update command line arguments with arguments taken from the configuration block.
+    -- Set the default oraclename if needed.
+    thyOpts = (thyHeurDefOracle . configStopOnTrace . configAutoSources) loadedThyOptions
+
+    -- Set the oraclename to theory_filename.oracle (if none was supplied).
+    thyHeurDefOracle =
+      set oHeuristic $ (\(Heuristic grl) -> Just $ Heuristic $ defaultOracleNames srcThyInFileName grl) =<< loadedHeuristic
+
+    -- Read and process the arguments from the theory's config block.
     srcThyConfigBlockArgs = argsConfigString $ either theoryConfigBlock diffTheoryConfigBlock srcThy
 
     argsConfigString =
@@ -459,6 +469,13 @@ closeTheory version loadedThyOptions sig srcThy = do
     theoryConfFlags =
       [flagOpt "dfs" ["stop-on-trace"] (updateArg "stop-on-trace") "" ""
      , flagNone ["auto-sources"] (addEmptyArg "auto-sources") ""]
+
+    configStopOnTrace =
+      if isNothing loadedStopOnTrace
+        then L.set oStopOnTrace (either (\(ArgumentError e) -> error e) id $ stopOnTrace srcThyConfigBlockArgs)
+        else id
+
+    configAutoSources = L.set oAutoSources (argExists "auto-sources" srcThyConfigBlockArgs || loadedAutoSources)
 
 (&&&) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
 (&&&) f g x = f x && g x
