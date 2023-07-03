@@ -38,6 +38,7 @@ removeTranslationItems thy =
   Theory {_thyName=(L.get thyName thy)
           ,_thyInFile=(L.get thyInFile thy)
           ,_thyHeuristic=(L.get thyHeuristic thy)
+          ,_thyTactic=(L.get thyTactic thy)
           ,_thySignature=(L.get thySignature thy)
           ,_thyCache=(L.get thyCache thy)
           ,_thyItems = newThyItems
@@ -59,6 +60,7 @@ openTranslatedTheory thy =
   Theory {_thyName=(L.get thyName thy)
           ,_thyInFile=(L.get thyInFile thy)
           ,_thyHeuristic=(L.get thyHeuristic thy)
+          ,_thyTactic=(L.get thyTactic thy)
           ,_thySignature=(L.get thySignature thy)
           ,_thyCache=(L.get thyCache thy)
           ,_thyItems = newThyItems
@@ -389,17 +391,17 @@ addAutoSourcesLemma hnd lemmaName (ClosedRuleCache _ raw _ _) items =
 -- Open theory construction / modification
 ------------------------------------------------------------------------------
 defaultOption :: Option
-defaultOption = Option False False False False False False False S.empty [] 10 5
+defaultOption = Option False False False False False False False False S.empty [] 10 5
 
 
 
 -- | Default theory
 defaultOpenTheory :: Bool -> OpenTheory
-defaultOpenTheory flag = Theory "default" "default" [] (emptySignaturePure flag) [] [] defaultOption
+defaultOpenTheory flag = Theory "default" [] [] (emptySignaturePure flag) [] [] defaultOption
 
 -- | Default diff theory
 defaultOpenDiffTheory :: Bool -> OpenDiffTheory
-defaultOpenDiffTheory flag = DiffTheory "default" "default" [] (emptySignaturePure flag) [] [] [] [] [] defaultOption
+defaultOpenDiffTheory flag = DiffTheory "default" [] [] (emptySignaturePure flag) [] [] [] [] [] defaultOption
 
 -- Add the default Diff lemma to an Open Diff Theory
 addDefaultDiffLemma:: OpenDiffTheory -> OpenDiffTheory
@@ -739,6 +741,7 @@ prettyDiffTheory ppSig ppCache ppRule ppDiffPrf ppPrf thy = vsep $
     [ kwTheoryHeader $ text $ L.get diffThyName thy
     , lineComment_ "Function signature and definition of the equational theory E"
     , ppSig $ L.get diffThySignature thy
+    , if thyT == [] then text "" else vcat $ map prettyTactic thyT
     , if thyH == [] then text "" else text "heuristic: " <> text (prettyGoalRankings thyH)
     , ppCache $ L.get diffThyCacheLeft thy
     , ppCache $ L.get diffThyCacheRight thy
@@ -751,3 +754,5 @@ prettyDiffTheory ppSig ppCache ppRule ppDiffPrf ppPrf thy = vsep $
     ppItem = foldDiffTheoryItem
         prettyDiffRule ppRule (prettyDiffLemma ppDiffPrf) (prettyEitherLemma ppPrf) prettyEitherRestriction (uncurry prettyFormalComment) prettyConfigBlock
     thyH = L.get diffThyHeuristic thy
+    thyT = L.get diffThyTactic thy
+

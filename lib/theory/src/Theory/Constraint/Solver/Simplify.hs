@@ -308,11 +308,12 @@ reduceFormulas = do
 evalFormulaAtoms :: Reduction ChangeIndicator
 evalFormulaAtoms = do
     ctxt      <- ask
+    verbose   <- getVerbose
     valuation <- gets (partialAtomValuation ctxt)
     formulas  <- getM sFormulas
     applyChangeList $ do
         fm <- S.toList formulas
-        case simplifyGuarded valuation fm of
+        case simplifyGuarded valuation fm verbose of
           Just fm' -> return $ do
               case fm of
                 GDisj disj -> markGoalAsSolved "simplified" (DisjG disj)
@@ -444,7 +445,7 @@ freshOrdering = do
                                       = concatMap (extractFreshNotBelowReducible reducible) as
       extractFreshNotBelowReducible _ t | isFreshVar t = [t]
       extractFreshNotBelowReducible _ _                = []
-      
+
 
 -- | Compute all less relations implied by injective fact instances.
 --

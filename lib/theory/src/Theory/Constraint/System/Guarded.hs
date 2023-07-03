@@ -107,8 +107,6 @@ import           Text.PrettyPrint.Highlight
 
 import           Theory.Model
 
-import           Data.Functor.Identity
-
 -- Control.Monad.Fail import will become redundant in GHC 8.8+
 -- import qualified Control.Monad.Fail as Fail
 
@@ -628,11 +626,13 @@ simplifyGuarded :: (LNAtom -> Maybe Bool)
                 -- ^ Partial assignment for truth value of atoms.
                 -> LNGuarded
                 -- ^ Original formula
+                -> Bool
+                -- ^ Verbose parameter
                 -> Maybe LNGuarded
                 -- ^ Simplified formula, provided some simplification was
                 -- performed.
-simplifyGuarded valuation fm0
-    | fm1 /= fm0 = trace (render $ ppMsg) (Just fm1)
+simplifyGuarded valuation fm0 verbose
+    | fm1 /= fm0 = if (verbose) then trace (render $ ppMsg) (Just fm1) else (Just fm1)
     | otherwise  = Nothing
   where
     fm1 = simplifyGuardedOrReturn valuation fm0

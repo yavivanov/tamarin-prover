@@ -18,7 +18,7 @@ import Prelude hiding (id, (.))
 import Text.PrettyPrint.Highlight
 
 
-import           Prelude                             hiding (id, (.))
+import           Prelude                             hiding (id, (.))                 
 
 
 -- import           Data.Typeable
@@ -99,9 +99,11 @@ getProofContext l thy = ProofContext
     ( L.get (cases . thyCache)                 thy)
     inductionHint
     specifiedHeuristic
+    specifiedTactic
     (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
     (L.get lName l)
     ([ h | HideLemma h <- L.get lAttributes l])
+    ( L.get (verboseOption.thyOptions)         thy)
     False
     (all isSubtermRule  $ filter isDestrRule $ intruderRules $ L.get (crcRules . thyCache) thy)
     (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . thyCache) thy)
@@ -123,6 +125,13 @@ getProofContext l thy = ProofContext
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
 
+    -- Tactic specified for the lemma
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get thyTactic thy
+
 -- | Get the proof context for a lemma of the closed theory.
 getProofContextDiff :: Side -> Lemma a -> ClosedDiffTheory -> ProofContext
 getProofContextDiff s l thy = case s of
@@ -134,9 +143,11 @@ getProofContextDiff s l thy = case s of
             ( L.get (cases . diffThyCacheLeft)                 thy)
             inductionHint
             specifiedHeuristic
+            specifiedTactic
             (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
             (L.get lName l)
             ([ h | HideLemma h <- L.get lAttributes l])
+            False
             False
             (all isSubtermRule  $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheLeft) thy)
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheLeft) thy)
@@ -148,9 +159,11 @@ getProofContextDiff s l thy = case s of
             ( L.get (cases . diffThyCacheRight)              thy)
             inductionHint
             specifiedHeuristic
+            specifiedTactic
             (toSystemTraceQuantifier $ L.get lTraceQuantifier l)
             (L.get lName l)
             ([ h | HideLemma h <- L.get lAttributes l])
+            False
             False
             (all isSubtermRule  $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
@@ -170,6 +183,12 @@ getProofContextDiff s l thy = case s of
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lAttributes l])
+
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get diffThyTactic thy
 
 -- | Get the proof context for a diff lemma of the closed theory.
 getDiffProofContext :: DiffLemma a -> ClosedDiffTheory -> DiffProofContext
@@ -198,9 +217,11 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             ( L.get (crcRefinedSources . diffThyDiffCacheLeft)              thy)
             AvoidInduction
             specifiedHeuristic
+            specifiedTactic
             ExistsNoTrace
             ( L.get lDiffName l )
             ([ h | HideLemma h <- L.get lDiffAttributes l])
+            False
             True
             (all isSubtermRule  $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheLeft) thy)
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheLeft) thy)
@@ -212,9 +233,11 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
             ( L.get (crcRefinedSources . diffThyDiffCacheRight)              thy)
             AvoidInduction
             specifiedHeuristic
+            specifiedTactic
             ExistsNoTrace
             ( L.get lDiffName l )
             ([ h | HideLemma h <- L.get lDiffAttributes l])
+            False
             True
             (all isSubtermRule  $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
             (any isConstantRule $ filter isDestrRule $ intruderRules $ L.get (crcRules . diffThyCacheRight) thy)
@@ -227,6 +250,12 @@ getDiffProofContext l thy = DiffProofContext (proofContext LHS) (proofContext RH
       where
         lattr = (headMay [Heuristic gr
                     | LemmaHeuristic gr <- L.get lDiffAttributes l])
+
+    specifiedTactic = case lattr of
+        [] -> Nothing
+        _  -> Just lattr
+      where
+        lattr = L.get diffThyTactic thy
 
 -- | The facts with injective instances in this theory
 getInjectiveFactInsts :: ClosedTheory -> S.Set FactTag
@@ -357,6 +386,7 @@ prettyClosedTheory thy = if containsManualRuleVariants mergedRules
     thy' = Theory {_thyName=(L.get thyName thy)
             ,_thyInFile=(L.get thyInFile thy)
             ,_thyHeuristic=(L.get thyHeuristic thy)
+            ,_thyTactic=(L.get thyTactic thy)
             ,_thySignature=(L.get thySignature thy)
             ,_thyCache=(L.get thyCache thy)
             ,_thyItems = mergedRules
@@ -395,6 +425,7 @@ prettyClosedDiffTheory thy = if containsManualRuleVariantsDiff mergedRules
     thy' = DiffTheory {_diffThyName=(L.get diffThyName thy)
             ,_diffThyInFile=(L.get diffThyInFile thy)
             ,_diffThyHeuristic=(L.get diffThyHeuristic thy)
+            ,_diffThyTactic=(L.get diffThyTactic thy)
             ,_diffThySignature=(L.get diffThySignature thy)
             ,_diffThyCacheLeft=(L.get diffThyCacheLeft thy)
             ,_diffThyCacheRight=(L.get diffThyCacheRight thy)
