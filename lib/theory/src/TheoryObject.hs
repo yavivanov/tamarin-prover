@@ -113,6 +113,7 @@ module TheoryObject (
   , lookupExportInfo
   , prettyRestriction
   , prettyProcess
+  , prettyConfigBlock
   , prettyTactic
   , theoryCaseTests
   , theoryAccLemmas
@@ -168,6 +169,7 @@ import Data.ByteString.Char8 (unpack)
 -- and the lemmas that
 data Theory sig c r p s = Theory {
          _thyName      :: String
+       , _thyInFile    :: String
        , _thyHeuristic :: [GoalRanking ProofContext]
        , _thyTactic    :: [Tactic ProofContext]
        , _thySignature :: sig
@@ -183,6 +185,7 @@ $(mkLabels [''Theory])
 -- | A diff theory contains a set of rewriting rules with diff modeling two instances
 data DiffTheory sig c r r2 p p2 = DiffTheory {
          _diffThyName           :: String
+       , _diffThyInFile         :: String
        , _diffThyHeuristic      :: [GoalRanking ProofContext]
        , _diffThyTactic        :: [Tactic ProofContext]
        , _diffThySignature      :: sig
@@ -495,21 +498,21 @@ addDiffLemma l thy = do
 
 -- | Add a new default heuristic. Fails if a heuristic is already defined.
 addHeuristic :: [GoalRanking ProofContext] -> Theory sig c r p s -> Maybe (Theory sig c r p s)
-addHeuristic h (Theory n [] t sig c i o) = Just (Theory n h t sig c i o)
+addHeuristic h (Theory n f [] t sig c i o) = Just (Theory n f h t sig c i o)
 addHeuristic _ _ = Nothing
 
 addDiffHeuristic :: [GoalRanking ProofContext] -> DiffTheory sig c r r2 p p2 -> Maybe (DiffTheory sig c r r2 p p2)
-addDiffHeuristic h (DiffTheory n [] t sig cl cr dcl dcr i opt) = Just (DiffTheory n h t sig cl cr dcl dcr i opt)
+addDiffHeuristic h (DiffTheory n f [] t sig cl cr dcl dcr i opt) = Just (DiffTheory n f h t sig cl cr dcl dcr i opt)
 addDiffHeuristic _ _ = Nothing
 
 addTactic :: Tactic ProofContext -> Theory sig c r p s -> Maybe (Theory sig c r p s)
-addTactic t (Theory n h [] sig c i o) = Just (Theory n h [t] sig c i o)
-addTactic t (Theory n h l sig c i o) = Just (Theory n h (l++[t]) sig c i o)
+addTactic t (Theory n f h [] sig c i o) = Just (Theory n f h [t] sig c i o)
+addTactic t (Theory n f h l sig c i o) = Just (Theory n f h (l++[t]) sig c i o)
 -- addTactic _ _ = Nothing
 
 addDiffTactic :: Tactic ProofContext -> DiffTheory sig c r r2 p p2 -> Maybe (DiffTheory sig c r r2 p p2)
-addDiffTactic t (DiffTheory n h [] sig cl cr dcl dcr i o) = Just (DiffTheory n h [t] sig cl cr dcl dcr i o)
-addDiffTactic t (DiffTheory n h l sig cl cr dcl dcr i o) = Just (DiffTheory n h (l++[t]) sig cl cr dcl dcr i o)
+addDiffTactic t (DiffTheory n f h [] sig cl cr dcl dcr i o) = Just (DiffTheory n f h [t] sig cl cr dcl dcr i o)
+addDiffTactic t (DiffTheory n f h l sig cl cr dcl dcr i o) = Just (DiffTheory n f h (l++[t]) sig cl cr dcl dcr i o)
 
 -- | Remove a lemma by name. Fails, if the lemma does not exist.
 removeLemma :: String -> Theory sig c r p s -> Maybe (Theory sig c r p s)
@@ -554,7 +557,6 @@ removeDiffLemma lemmaName thy = do
                                  (return . EitherRestrictionItem)
                                  (return . DiffTextItem)
                                  (return . DiffConfigBlockItem)
-
     check l = do guard (L.get lDiffName l /= lemmaName); return (DiffLemmaItem l)
 
 -- | Find the restriction with the given name.
@@ -723,6 +725,10 @@ prettyEitherRestriction (s, rstr) =
     (nest 2 $ if safety then lineComment_ "safety formula" else emptyDoc)
   where
     safety = isSafetyFormula $ formulaToGuarded_ $ L.get rstrFormula rstr
+
+-- | Pretty print a configuration block. 
+prettyConfigBlock :: HighlightDocument d => ConfigBlock -> d
+prettyConfigBlock cb = text "configuration: " <> doubleQuotes (text cb)
 
 prettyTactic :: HighlightDocument d => Tactic ProofContext -> d
 prettyTactic tactic = kwTactic <> colon <> space <> (text $ _name tactic) 
