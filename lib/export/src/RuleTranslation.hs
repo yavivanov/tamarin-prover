@@ -21,6 +21,7 @@ import         Theory
 import         Text.PrettyPrint.Class
 import         Theory.Text.Pretty
 
+import         Sapic.Compression (mergeInfo)
 import         Sapic.Exceptions
 
 import           Control.Exception
@@ -33,15 +34,19 @@ import Data.List as List
 import qualified Data.ByteString.Char8 as BC
 import Data.Char
 import Sapic.Facts
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, isJust, catMaybes)
+import Control.Monad.Trans.Reader (runReader)
+import Debug.Trace
+import Data.Foldable
+import Control.Monad.Bind (MonadFresh, evalFreshT)
 
 -- This is the function which is called from the export module. It returns a list
 -- of process declarations for translated rules, a process which executes them all
 -- in parallel, and the headers we need for the translation
-loadRules :: OpenTheory -> ([Doc], Doc, ([(String, String, String, [String])], [(String, String, String, String)], [(String, String, String, [String])], [(String, String)], [(String, String)]))
-loadRules thy = case theoryRules thy of
+loadRules :: MaudeHandle -> OpenTheory -> ([Doc], Doc, ([(String, String, String, [String])], [(String, String, String, String)], [(String, String, String, [String])], [(String, String)], [(String, String)]))
+loadRules hnd thy = case theoryRules thy of
   []    -> ([text ""], text "", ([],[],[],[],[]))
-  rules -> (ruleDocs, ruleComb, headers)
+  thyRules -> (ruleDocs, ruleComb, headers)
            where
              (ruleDocs, destructors) =
                foldl' (\acc@(_, destrs) r -> acc `combine2` translateOpenProtoRule r thy destrs) ([], M.empty) rules
@@ -51,6 +56,47 @@ loadRules thy = case theoryRules thy of
              (frHeaders, tblHeaders, evHeaders) = foldMap (`makeHeadersFromRule` thy) rules
              ruleNames = map (\(OpenProtoRule ruE _) -> showRuleName . L.get preName $ L.get rInfo ruE) rules
              ruleComb = text ("( " ++ intercalate " | " (map ((++")") . ("!("++)) ruleNames) ++ " )")
+             rules = connectRules hnd thyRules
+
+connectRules :: MaudeHandle -> [OpenProtoRule] -> [OpenProtoRule]
+connectRules hnd rs = loopOverRules rs
+  where
+    loopOverRules [] = []
+    loopOverRules (r:rs) = (OpenProtoRule {_oprRuleE=re, _oprRuleAC=[]}) : loopOverRules rs
+      where
+        rE = L.get oprRuleE r
+        rsE = map (L.get oprRuleE) rs
+        re = findMatches rE rsE
+
+    connectableRules r1 r2
+      = case (L.get rConcs r1, L.get rPrems r2) of
+      ([fa1], [fa2]) ->
+        isStateFact fa1 && isStateFact fa2
+        && factTagName (factTag fa1) == factTagName (factTag fa2)
+        && runMaude (unifiableLNFacts fa1 fa2)
+      _ -> False
+
+    connectRules r1 r2 = case (L.get rConcs r1, L.get rPrems r2) of
+      ([fa1], [fa2]) ->
+        connectedRule (applyUnifier fa1 fa2 r1) (applyUnifier fa1 fa2 r2)
+      _ -> error "should not be possible"
+      where
+        connectedRule (Rule i1 rp1 _ ra1 rnv1) (Rule i2 _ rc2 ra2 rnv2) =
+          Rule (mergeInfo i1 i2) rp1 rc2 (ra1 ++ ra2) (rnv1 ++ rnv2)
+        applyUnifier fa1 fa2 = apply subst
+          where
+            substFresh = head $ runMaude $ unifyLNFactEqs [Equal fa1 fa2]
+            subst = freshToFree substFresh `evalFreshAvoiding` (factTerms fa1 ++ factTerms fa2)
+
+    runMaude = (`runReader` hnd)
+
+    findMatches r rs =
+      if length ruleMatches == 1
+        then connectRules r (head ruleMatches)
+        else r
+      where
+        ruleMatches = filter (connectableRules r) rs
+
 
 ------------------------------------------------------------------------------
 -- Header generation
@@ -67,7 +113,7 @@ makeHeadersFromRule (OpenProtoRule ruE _) = makeHeadersFromProtoRule ruE
 notDiffRuleActs :: Rule ProtoRuleEInfo -> [Fact LNTerm]
 notDiffRuleActs ru = filter isNotDiffAnnotation (L.get rActs ru)
   where
-    isNotDiffAnnotation fa = 
+    isNotDiffAnnotation fa =
       fa /= Fact {factTag = ProtoFact Linear ("Diff" ++ getRuleNameDiff ru) 0, factAnnotations = S.empty, factTerms = []}
 
 makeHeadersFromProtoRule :: Rule ProtoRuleEInfo -> OpenTheory -> ([(String, String, String, [String])], [(String, String)], [(String, String)])
@@ -89,7 +135,7 @@ makeFreeHeaders rprems racts rconcls thy = headers
     headers = map ("free",, ":bitstring", []) $ S.toList bitstrings
 
 searchLemmaForBitstrings :: ProtoFormula Unit2 (String, LSort) Name LVar -> S.Set String
-searchLemmaForBitstrings = 
+searchLemmaForBitstrings =
   foldFormula searchAtomForBitstring (const S.empty) id (\_ p q -> p `S.union` q) (\_ _ p -> p)
   where
     searchAtomForBitstring a = case a of
@@ -150,7 +196,7 @@ incorrectTermTypes thy t = case viewTerm t of
       typeChecker name (Nothing : ts) outType = typeChecker name ts outType
       typeChecker name (Just _ : _) _         = Just name
 
-translateProtoRule :: (HighlightDocument d)
+translateProtoRule :: HighlightDocument d
                 => Rule ProtoRuleEInfo -> M.Map (String, String) String -> (d, M.Map (String, String) String)
 translateProtoRule ru de =
     (ruleDoc, destructors)
@@ -163,7 +209,7 @@ showRuleName :: ProtoRuleName -> String
 showRuleName FreshRule = "rFresh"
 showRuleName (StandRule s) = 'r' : s
 
-translateRule :: (HighlightDocument d) => [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)
+translateRule :: HighlightDocument d=> [LNFact] -> [LNFact] -> [LNFact] -> M.Map (String, String) String -> (d, M.Map (String, String) String)
 translateRule rprems racts rconcls destrs =
     -- docsX contains the expression resulting from the given translation (as an instance of Doc)
     -- varsX is a set of all variables that have appeared in the rule translation until that point
@@ -179,7 +225,7 @@ translateRule rprems racts rconcls destrs =
         (docs6, vars6) = translateNonPatterns racts EVENT (const True) vars5
         (docs7, vars7) = translateNonPatterns (rconcls \\ rprems) INSERT isStorage vars6
         (docs8, _) = translateNonPatterns rconcls OUT isOutFact vars7
-    
+
     in (combineRuleDocs (docs1++docs2++docs3) (docs4++docs5++docs6++docs7++docs8), destr3)
 
 combineRuleDocs :: (HighlightDocument d) => [d] -> [d] -> d

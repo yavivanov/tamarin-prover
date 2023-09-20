@@ -103,8 +103,8 @@ proverifTemplate headers queries process macroproc ruleproc lemmas =
     $$ text "process"
     $$ nest 4 process
 
-prettyProVerifTheory :: (ProtoLemma LNFormula ProofSkeleton -> Bool) -> (OpenTheory, TypingEnvironment) -> IO Doc
-prettyProVerifTheory lemSel (thy, typEnv) = do
+prettyProVerifTheory :: MaudeHandle -> (ProtoLemma LNFormula ProofSkeleton -> Bool) -> (OpenTheory, TypingEnvironment) -> IO Doc
+prettyProVerifTheory hnd lemSel (thy, typEnv) = do
   headers <- loadHeaders tc thy typEnv
   headers2 <- checkDuplicates $ (S.toList . filterHeaders $ baseHeaders `S.union` headers `S.union` prochd `S.union` macroprochd) ++ S.toList (filterHeaders ruleHeaders)
   let hd = attribHeaders tc headers2
@@ -112,7 +112,7 @@ prettyProVerifTheory lemSel (thy, typEnv) = do
   where
     tc = emptyTC {predicates = theoryPredicates thy}
     (proc, prochd, hasBoundState, hasUnboundState) = loadProc tc thy
-    (ruleproc, ruleComb, (baseRuleHeaders, destrHeaders, frHeaders, tblHeaders, evHeaders)) = loadRules thy
+    (ruleproc, ruleComb, (baseRuleHeaders, destrHeaders, frHeaders, tblHeaders, evHeaders)) = loadRules hnd thy
     baseRuleHeaderSet = S.fromList $ map (uncurry4 Sym) baseRuleHeaders
     destrHeaderSet = S.fromList $ map (uncurry4 Eq) destrHeaders
     frHeaderSet = S.fromList $ map (uncurry4 Sym) frHeaders

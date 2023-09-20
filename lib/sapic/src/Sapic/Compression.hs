@@ -13,6 +13,7 @@
 --
 
 module Sapic.Compression (
+    mergeInfo,
     pathCompression
 ) where
 import Control.Monad.Catch

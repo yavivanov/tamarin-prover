@@ -71,3 +71,8 @@ instance (Monoid w, MonadFresh m) => MonadFresh (WriterT w m) where
     freshIdent       = lift . freshIdent
     freshIdents      = lift . freshIdents
     scopeFreshness m = WriterT $ scopeFreshness (runWriterT m)
+
+instance MonadFresh [] where
+    freshIdent       = freshIdent
+    freshIdents      = freshIdents
+    scopeFreshness = scopeFreshness

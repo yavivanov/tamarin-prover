@@ -165,12 +165,14 @@ run thisMode as
       srcThy <- liftIO $ readFile inFile
       thy    <- loadTheory thyLoadOptions srcThy inFile
 
+      let sig = either (get thySignature) (get diffThySignature) thy
+      sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath thyLoadOptions) sig
+
       if isParseOnlyMode then do
-        either (\t -> bisequence (liftIO $ choosePretty t, return Pretty.emptyDoc))
+        either (\t -> bisequence (liftIO $ choosePretty (get sigmMaudeHandle sig') t, return Pretty.emptyDoc))
                (\d -> return (prettyOpenDiffTheory d, Pretty.emptyDoc)) thy
       else do
-        let sig = either (get thySignature) (get diffThySignature) thy
-        sig'   <- liftIO $ toSignatureWithMaude (get oMaudePath thyLoadOptions) sig
+        
 
         (report, thy') <- closeTheory versionData thyLoadOptions sig' thy
         either (\t -> return (prettyClosedTheory t,     ppWf report Pretty.$--$ prettyClosedSummary t))
@@ -192,7 +194,7 @@ run thisMode as
         ppWf rep = Pretty.vcat $ Pretty.text ("WARNING: " ++ show (length rep) ++ " wellformedness check failed!")
                              : [ Pretty.text   "         The analysis results might be wrong!" | get oProveMode thyLoadOptions ]
 
-        choosePretty = case get oOutputModule thyLoadOptions of
+        choosePretty hnd = case get oOutputModule thyLoadOptions of
           Nothing               -> return . prettyOpenTheory  <=< Sapic.warnings -- output as is, including SAPIC elements
           Just ModuleSpthy      -> return . prettyOpenTheory  <=< Sapic.warnings -- output as is, including SAPIC elements
           Just ModuleSpthyTyped -> return . prettyOpenTheory <=< Sapic.typeTheory <=< Sapic.warnings  -- additionally type
@@ -201,6 +203,6 @@ run thisMode as
             <=< (return . removeTranslationItems)
             <=< Sapic.typeTheory
             <=< Sapic.warnings
-          Just ModuleProVerif              -> Export.prettyProVerifTheory (lemmaSelector thyLoadOptions) <=< Sapic.typeTheoryEnv <=< Sapic.warnings
+          Just ModuleProVerif              -> Export.prettyProVerifTheory hnd (lemmaSelector thyLoadOptions) <=< Sapic.typeTheoryEnv <=< Sapic.warnings
           Just ModuleProVerifEquivalence   -> Export.prettyProVerifEquivTheory <=< Sapic.typeTheoryEnv <=< Sapic.warnings
           Just ModuleDeepSec               -> Export.prettyDeepSecTheory <=< Sapic.typeTheory <=< Sapic.warnings
