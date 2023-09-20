@@ -62,11 +62,11 @@ connectRules :: MaudeHandle -> [OpenProtoRule] -> [OpenProtoRule]
 connectRules hnd rs = loopOverRules rs
   where
     loopOverRules [] = []
-    loopOverRules (r:rs) = (OpenProtoRule {_oprRuleE=re, _oprRuleAC=[]}) : loopOverRules rs
+    loopOverRules (r:rs) = (OpenProtoRule {_oprRuleE=re, _oprRuleAC=[]}) : loopOverRules (map (\re -> (OpenProtoRule {_oprRuleE=re, _oprRuleAC=[]})) rss)
       where
         rE = L.get oprRuleE r
         rsE = map (L.get oprRuleE) rs
-        re = findMatches rE rsE
+        (re, rss) = findMatches rE rsE
 
     connectableRules r1 r2
       = case (L.get rConcs r1, L.get rPrems r2) of
@@ -86,17 +86,20 @@ connectRules hnd rs = loopOverRules rs
         applyUnifier fa1 fa2 = apply subst
           where
             substFresh = head $ runMaude $ unifyLNFactEqs [Equal fa1 fa2]
-            subst = freshToFree substFresh `evalFreshAvoiding` (factTerms fa1 ++ factTerms fa2)
+            subst = freshToFreeAvoiding substFresh (factTerms fa1 ++ factTerms fa2)
 
     runMaude = (`runReader` hnd)
 
     findMatches r rs =
       if length ruleMatches == 1
-        then connectRules r (head ruleMatches)
-        else r
+        then (connectRules r (head ruleMatches), removeMatchedRule (head ruleMatches) rs)
+        else (r, rs)
       where
         ruleMatches = filter (connectableRules r) rs
-
+    
+    removeMatchedRule mr [] = []
+    removeMatchedRule mr (r:rs) = 
+      if ruleName mr == ruleName r then removeMatchedRule mr rs else r : removeMatchedRule mr rs
 
 ------------------------------------------------------------------------------
 -- Header generation
